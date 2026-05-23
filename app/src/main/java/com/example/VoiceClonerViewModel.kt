@@ -75,7 +75,7 @@ class VoiceClonerViewModel(private val db: AppDatabase) : ViewModel() {
     }
 
     fun saveProfile(name: String, analysis: String, path: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val displayName = name.ifBlank { "פרופיל קולי שנוצר" }
             val stats = "מבטא: ${_uiState.value.selectedAccent} | פונטי: ${if (_uiState.value.phoneticAccuracy) "פעיל" else "כבוי"}"
             db.voiceDao().insert(VoiceProfile(name = displayName, analysisData = stats, audioPath = path))
@@ -83,15 +83,19 @@ class VoiceClonerViewModel(private val db: AppDatabase) : ViewModel() {
     }
 
     fun deleteProfile(profile: VoiceProfile) {
-        viewModelScope.launch {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             db.voiceDao().delete(profile)
+        }
+        if (_uiState.value.speakingProfileName == profile.name) {
+            stopSpeakingSimulation()
         }
     }
 
     fun clearAllProfiles() {
-        viewModelScope.launch {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             db.voiceDao().deleteAll()
         }
+        stopSpeakingSimulation()
     }
 
     fun startSpeakingSimulation(text: String, profileName: String) {

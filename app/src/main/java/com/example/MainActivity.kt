@@ -238,7 +238,7 @@ fun VoiceClonerStepper(currentStep: ClonerStep) {
             }
 
             if (index < steps.size - 1) {
-                Divider(
+                HorizontalDivider(
                     modifier = Modifier
                         .weight(0.1f)
                         .padding(horizontal = 4.dp),
@@ -256,13 +256,13 @@ fun RecordingStepView(
     onToggleRecording: () -> Unit,
     onNext: () -> Unit
 ) {
-    val durationText = String.format("%02d:%02d", recordingDuration / 60, recordingDuration % 60)
+    val durationText = String.format(java.util.Locale.US, "%02d:%02d", recordingDuration / 60, recordingDuration % 60)
     
     // Wave animation parameters
     val infiniteTransition = rememberInfiniteTransition(label = "Waves")
     val waveOffset by infiniteTransition.animateFloat(
         initialValue = 0f,
-        targetValue = 2f * java.lang.Float.MAX_VALUE,
+        targetValue = 1000f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 3000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
@@ -328,19 +328,25 @@ fun RecordingStepView(
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         val width = size.width
                         val height = size.height
+                        if (width.isNaN() || height.isNaN() || width <= 0f || height <= 0f) return@Canvas
                         val midY = height / 2f
                         
                         // Let's draw 3 overlaid sine waves for a modern professional acoustic appearance
                         val wavesCount = 3
+                        val safeWaveOffset = if (waveOffset.isNaN() || waveOffset.isInfinite()) 0f else waveOffset
                         for (w in 0 until wavesCount) {
                             val path = androidx.compose.ui.graphics.Path()
                             path.moveTo(0f, midY)
                             
-                            val amplitude = (30f + w * 15f) * sin(waveOffset * 0.05f + w * 2f).coerceIn(-1f, 1f)
+                            val baseSin = sin(safeWaveOffset * 0.05f + w * 2f)
+                            val safeBaseSin = if (baseSin.isNaN() || baseSin.isInfinite()) 0f else baseSin.coerceIn(-1f, 1f)
+                            val amplitude = (30f + w * 15f) * safeBaseSin
                             val frequency = 0.015f + w * 0.005f
                             
                             for (x in 0..width.toInt() step 5) {
-                                val y = midY + amplitude * sin(x * frequency + waveOffset * 0.05f)
+                                val s = sin(x * frequency + safeWaveOffset * 0.05f)
+                                val safeS = if (s.isNaN() || s.isInfinite()) 0f else s
+                                val y = midY + amplitude * safeS
                                 path.lineTo(x.toFloat(), y)
                             }
                             drawPath(
@@ -697,18 +703,22 @@ fun SavingStepView(
                             ) {
                                 val width = size.width
                                 val height = size.height
+                                if (width.isNaN() || height.isNaN() || width <= 0f || height <= 0f) return@Canvas
                                 val midY = height / 2f
                                 val bars = 40
                                 val spacing = width / bars
                                 
+                                val safeSpeechOffset = if (speechOffset.isNaN() || speechOffset.isInfinite()) 0f else speechOffset
                                 for (i in 0 until bars) {
                                     val x = i * spacing
-                                    val factor = sin(i * 0.3f + speechOffset * 0.1f)
+                                    val s = sin(i * 0.3f + safeSpeechOffset * 0.1f)
+                                    val factor = if (s.isNaN() || s.isInfinite()) 0f else s
                                     val barHeight = (height * 0.8f) * kotlin.math.abs(factor)
+                                    val safeBarHeight = if (barHeight.isNaN() || barHeight.isInfinite()) 0f else barHeight
                                     drawLine(
                                         color = lineColor(i),
-                                        start = androidx.compose.ui.geometry.Offset(x, midY - barHeight / 2f),
-                                        end = androidx.compose.ui.geometry.Offset(x, midY + barHeight / 2f),
+                                        start = androidx.compose.ui.geometry.Offset(x, midY - safeBarHeight / 2f),
+                                        end = androidx.compose.ui.geometry.Offset(x, midY + safeBarHeight / 2f),
                                         strokeWidth = 8f,
                                         cap = StrokeCap.Round
                                     )
