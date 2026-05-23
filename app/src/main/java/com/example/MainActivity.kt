@@ -45,10 +45,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Fix: Use fallbackToDestructiveMigration() to prevent runtime SQLite crashes due to model modifications
-        db = Room.databaseBuilder(applicationContext, AppDatabase::class.java, "voice-cloner-db")
-            .fallbackToDestructiveMigration()
-            .build()
+        // Fix: Use Singleton AppDatabase to prevent runtime SQLite crashes and multiple database connection lockups
+        db = AppDatabase.getDatabase(applicationContext)
         
         enableEdgeToEdge()
         setContent {
@@ -798,7 +796,7 @@ fun SavingStepView(
                         }
                     }
                 } else {
-                    items(profiles) { profile ->
+                    items(profiles, key = { it.id }) { profile ->
                         VoiceProfileRow(
                             profile = profile,
                             onSpeak = {
@@ -828,10 +826,15 @@ fun SavingStepView(
     }
 }
 
-// Draw nice rainbow wave bars
+// Draw nice premium wave bars using a predefined safe Color palette
 private fun lineColor(index: Int): Color {
-    val h = (index * 8) % 360
-    return Color.hsl(h.toFloat(), 0.8f, 0.5f)
+    val colors = listOf(
+        Color(0xFFE57373), Color(0xFFF06292), Color(0xFFBA68C8), Color(0xFF9575CD),
+        Color(0xFF7986CB), Color(0xFF64B5F6), Color(0xFF4FC3F7), Color(0xFF4DD0E1),
+        Color(0xFF4DB6AC), Color(0xFF81C784), Color(0xFFAED581), Color(0xFFFFD54F),
+        Color(0xFFFFB74D), Color(0xFFFF8A65)
+    )
+    return colors[kotlin.math.abs(index) % colors.size]
 }
 
 @Composable
