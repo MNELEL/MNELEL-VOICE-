@@ -1,6 +1,7 @@
 package com.example
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -26,6 +27,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -53,7 +57,7 @@ class MainActivity : ComponentActivity() {
             MyApplicationTheme {
                 val viewModel: VoiceClonerViewModel = viewModel(factory = object : androidx.lifecycle.ViewModelProvider.Factory {
                     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-                        return VoiceClonerViewModel(db) as T
+                        return VoiceClonerViewModel(db, applicationContext) as T
                     }
                 })
                 
@@ -74,7 +78,84 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun VoiceClonerApp(viewModel: VoiceClonerViewModel, modifier: Modifier = Modifier) {
     val uiState by viewModel.uiState.collectAsState()
-    
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var showSettings by remember { mutableStateOf(false) }
+
+    val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            viewModel.toggleRecording()
+        } else {
+            Toast.makeText(context, "אפליקציית שיבוט הקול זקוקה לאישור המיקרופון שלך כדי להקליט ולנתח שמע.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    if (showSettings) {
+        var tempKey by remember { mutableStateOf(uiState.apiKey) }
+        AlertDialog(
+            onDismissRequest = { showSettings = false },
+            title = {
+                Text(
+                    text = "הגדרות מפתח API (רשת Gemini)",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "להפעלת שיבוט וניתוח קול מלא באמצעות בינה מלאכותית (כולל הקראה קולית ייחודית ב-TTS), אנא הזן מפתח Gemini API בחינם מ-Google AI Studio.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    OutlinedTextField(
+                        value = tempKey,
+                        onValueChange = { tempKey = it },
+                        label = { Text("Gemini API Key") },
+                        placeholder = { Text("הדבק מפתח כאן (AI Studio)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    Button(
+                        onClick = {
+                            val uri = android.net.Uri.parse("https://aistudio.google.com/")
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)
+                            context.startActivity(intent)
+                        },
+                        colors = ButtonDefaults.textButtonColors(),
+                        modifier = Modifier.align(Alignment.Start)
+                    ) {
+                        Icon(imageVector = Icons.Default.Share, contentDescription = "Open Link")
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("לקבלת מפתח API בחינם מ-Google AI Studio", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text(
+                        text = "• המפתח נשמר במכשיר שלך באופן מאובטח (SharedPreferences) ואינו מועבר לשום שרת חיצוני.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.saveApiKey(tempKey.trim())
+                        showSettings = false
+                        Toast.makeText(context, "מפתח ה-API עודכן בהצלחה!", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Text("שמור")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSettings = false }) {
+                    Text("ביטול")
+                }
+            }
+        )
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -101,36 +182,41 @@ fun VoiceClonerApp(viewModel: VoiceClonerViewModel, modifier: Modifier = Modifie
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Animated Mic icon (uses AccountCircle from core set)
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.AccountCircle,
-                        contentDescription = "Mic Icon",
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(24.dp)
+                    Image(
+                        painter = painterResource(id = R.drawable.img_app_icon),
+                        contentDescription = "App Logo",
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Crop
                     )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text(
+                            text = stringResource(R.string.app_name),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = stringResource(R.string.app_subtitle),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-                Spacer(modifier = Modifier.width(16.dp))
-                Column {
-                    Text(
-                        text = stringResource(R.string.app_name),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = stringResource(R.string.app_subtitle),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                IconButton(
+                    onClick = { showSettings = true },
+                    colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(imageVector = Icons.Default.Settings, contentDescription = "Settings")
                 }
             }
         }
@@ -151,7 +237,21 @@ fun VoiceClonerApp(viewModel: VoiceClonerViewModel, modifier: Modifier = Modifie
                     RecordingStepView(
                         isRecording = uiState.isRecording,
                         recordingDuration = uiState.recordingDuration,
-                        onToggleRecording = { viewModel.toggleRecording() },
+                        onToggleRecording = {
+                            if (uiState.isRecording) {
+                                viewModel.toggleRecording()
+                            } else {
+                                val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                                    context,
+                                    android.Manifest.permission.RECORD_AUDIO
+                                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                if (hasPermission) {
+                                    viewModel.toggleRecording()
+                                } else {
+                                    permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                }
+                            }
+                        },
                         onNext = { viewModel.setStep(ClonerStep.ANALYSIS) }
                     )
                 }
@@ -164,7 +264,7 @@ fun VoiceClonerApp(viewModel: VoiceClonerViewModel, modifier: Modifier = Modifie
                         onUpdateSpeed = { viewModel.updateSpeedLevel(it) },
                         onUpdateEmotionalDepth = { viewModel.updateEmotionalDepth(it) },
                         onSaveProfile = { name ->
-                            viewModel.saveProfile(name, "", "")
+                            viewModel.saveProfile(name)
                             viewModel.setStep(ClonerStep.SAVING)
                         }
                     )
@@ -326,7 +426,7 @@ fun RecordingStepView(
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         val width = size.width
                         val height = size.height
-                        if (width.isNaN() || height.isNaN() || width <= 0f || height <= 0f) return@Canvas
+                        if (width.isNaN() || width.isInfinite() || height.isNaN() || height.isInfinite() || width <= 0f || height <= 0f || width > 5000f || height > 5000f) return@Canvas
                         val midY = height / 2f
                         
                         // Let's draw 3 overlaid sine waves for a modern professional acoustic appearance
@@ -577,18 +677,35 @@ fun AnalysisStepView(
 
             // Save Action
             item {
-                Button(
-                    onClick = {
-                        val inputName = profileName.trim().ifEmpty { "פרופיל קולי" }
-                        onSaveProfile(inputName)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                        .padding(top = 8.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(text = stringResource(R.string.save_profile), fontWeight = FontWeight.Bold)
+                if (uiState.isAnalyzing) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "מנתח דגימת שמע בבינה מלאכותית...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                } else {
+                    Button(
+                        onClick = {
+                            val inputName = profileName.trim().ifEmpty { "פרופיל קולי" }
+                            onSaveProfile(inputName)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .padding(top = 8.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(text = stringResource(R.string.save_profile), fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -701,7 +818,7 @@ fun SavingStepView(
                             ) {
                                 val width = size.width
                                 val height = size.height
-                                if (width.isNaN() || height.isNaN() || width <= 0f || height <= 0f) return@Canvas
+                                if (width.isNaN() || width.isInfinite() || height.isNaN() || height.isInfinite() || width <= 0f || height <= 0f || width > 5000f || height > 5000f) return@Canvas
                                 val midY = height / 2f
                                 val bars = 40
                                 val spacing = width / bars
@@ -799,6 +916,14 @@ fun SavingStepView(
                     items(profiles, key = { it.id }) { profile ->
                         VoiceProfileRow(
                             profile = profile,
+                            isPlaying = uiState.isPlaying && uiState.playingProfileId == profile.id,
+                            onPlayRecord = {
+                                if (uiState.isPlaying && uiState.playingProfileId == profile.id) {
+                                    viewModel.stopProfileRecordingPlayback()
+                                } else {
+                                    viewModel.playProfileRecording(profile)
+                                }
+                            },
                             onSpeak = {
                                 viewModel.startSpeakingSimulation(testingText, profile.name)
                             },
@@ -840,6 +965,8 @@ private fun lineColor(index: Int): Color {
 @Composable
 fun VoiceProfileRow(
     profile: VoiceProfile,
+    isPlaying: Boolean,
+    onPlayRecord: () -> Unit,
     onSpeak: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -863,13 +990,16 @@ fun VoiceProfileRow(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.secondaryContainer),
+                        .background(
+                            if (isPlaying) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.secondaryContainer
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.AccountCircle,
                         contentDescription = "User Voice Profile",
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer
+                        tint = if (isPlaying) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
                     )
                 }
                 Spacer(modifier = Modifier.width(12.dp))
@@ -888,14 +1018,24 @@ fun VoiceProfileRow(
             }
             
             // Interaction icons
-            Row {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Play original recording
+                IconButton(onClick = onPlayRecord) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Close else Icons.Default.PlayArrow,
+                        contentDescription = "Play original record",
+                        tint = if (isPlaying) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
+                    )
+                }
+                // Speak/TTS testing text
                 IconButton(onClick = onSpeak) {
                     Icon(
-                        imageVector = Icons.Default.PlayArrow,
+                        imageVector = Icons.Default.Send,
                         contentDescription = "Listen voice clone",
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
+                // Delete
                 IconButton(onClick = onDelete) {
                     Icon(
                         imageVector = Icons.Default.Delete,
