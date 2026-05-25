@@ -39,7 +39,17 @@ class VoiceClonerViewModel(private val db: AppDatabase, private val context: Con
     private var speakingJob: Job? = null
 
     init {
-        val savedKey = prefs.getString("gemini_api_key", "") ?: ""
+        var savedKey = prefs.getString("gemini_api_key", "") ?: ""
+        if (savedKey.isBlank()) {
+            val buildConfigKey = try {
+                BuildConfig.GEMINI_API_KEY.orEmpty()
+            } catch (e: Throwable) {
+                ""
+            }
+            if (buildConfigKey.isNotBlank() && buildConfigKey != "MY_GEMINI_API_KEY") {
+                savedKey = buildConfigKey
+            }
+        }
         _uiState.update { it.copy(apiKey = savedKey) }
     }
 
@@ -159,7 +169,7 @@ class VoiceClonerViewModel(private val db: AppDatabase, private val context: Con
                         )
                     )
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 e.printStackTrace()
                 val fallbackReport = generateLocalAnalysis(accent, pitch, speed, depth, phonetic) +
                         "\n\n*(שים לב: ניתוח ה-AI נכשל עקב שגיאת תקשורת: ${e.message}. מבוצע ניתוח מקומי חלופי)*"
@@ -173,14 +183,18 @@ class VoiceClonerViewModel(private val db: AppDatabase, private val context: Con
                 }
 
                 withContext(Dispatchers.IO) {
-                    val displayName = name.ifBlank { "פרופיל קולי שנוצר" }
-                    db.voiceDao().insert(
-                        VoiceProfile(
-                            name = displayName,
-                            analysisData = fallbackReport,
-                            audioPath = path
+                    try {
+                        val displayName = name.ifBlank { "פרופיל קולי שנוצר" }
+                        db.voiceDao().insert(
+                            VoiceProfile(
+                                name = displayName,
+                                analysisData = fallbackReport,
+                                audioPath = path
+                            )
                         )
-                    )
+                    } catch (dbEx: Throwable) {
+                        dbEx.printStackTrace()
+                    }
                 }
             }
         }
@@ -194,12 +208,17 @@ class VoiceClonerViewModel(private val db: AppDatabase, private val context: Con
             stopSpeakingSimulation()
         }
         viewModelScope.launch(Dispatchers.IO) {
-            db.voiceDao().delete(profile)
-            if (profile.audioPath.isNotBlank()) {
-                val file = File(profile.audioPath)
-                if (file.exists()) {
-                    file.delete()
+            try {
+                db.voiceDao().delete(profile)
+                if (profile.audioPath.isNotBlank()) {
+                    val file = File(profile.audioPath)
+                    if (file.exists()) {
+                        file.delete()
+                    }
                 }
+            } catch (e: Throwable) {
+                e.printStackTrace()
+                showToast("נכשל במחיקת הפרופיל: ${e.message}")
             }
         }
     }
@@ -208,15 +227,16 @@ class VoiceClonerViewModel(private val db: AppDatabase, private val context: Con
         stopProfileRecordingPlayback()
         stopSpeakingSimulation()
         viewModelScope.launch(Dispatchers.IO) {
-            db.voiceDao().deleteAll()
             try {
+                db.voiceDao().deleteAll()
                 context.cacheDir.listFiles()?.forEach { file ->
                     if (file.name.startsWith("voice_record_") || file.name.startsWith("temp_tts_")) {
                         file.delete()
                     }
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 e.printStackTrace()
+                showToast("נכשל בניקוי הפרופילים: ${e.message}")
             }
         }
     }

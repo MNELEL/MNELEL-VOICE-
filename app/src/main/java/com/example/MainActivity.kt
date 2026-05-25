@@ -119,9 +119,14 @@ fun VoiceClonerApp(viewModel: VoiceClonerViewModel, modifier: Modifier = Modifie
                     )
                     Button(
                         onClick = {
-                            val uri = android.net.Uri.parse("https://aistudio.google.com/")
-                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)
-                            context.startActivity(intent)
+                            try {
+                                val uri = android.net.Uri.parse("https://aistudio.google.com/")
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                Toast.makeText(context, "לא נמצא דפדפן זמין לפתיחת הקישור.", Toast.LENGTH_SHORT).show()
+                            }
                         },
                         colors = ButtonDefaults.textButtonColors(),
                         modifier = Modifier.align(Alignment.Start)
