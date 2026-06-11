@@ -5,7 +5,11 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [VoiceProfile::class, VoiceGenerationResult::class], version = 2, exportSchema = false)
+@Database(
+    entities = [VoiceProfile::class, VoiceGenerationResult::class],
+    version = 2,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun voiceDao(): VoiceDao
 
@@ -20,8 +24,8 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "voice_cloner_database"
                 )
-                    .fallbackToDestructiveMigration()
-                    .build()
+                .fallbackToDestructiveMigration()
+                .build()
                 INSTANCE = instance
                 instance
             }

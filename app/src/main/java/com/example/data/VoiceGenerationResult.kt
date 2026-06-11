@@ -9,6 +9,6 @@ data class VoiceGenerationResult(
     val profileId: Int,
     val profileName: String,
     val inputText: String,
-    val audioPath: String, // Absolute saved file path of the synthetic .mp3 audio
+    val audioPath: String,
     val createdAt: Long = System.currentTimeMillis()
 )

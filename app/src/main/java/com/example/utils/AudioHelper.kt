@@ -10,38 +10,78 @@ import java.io.File
 import java.io.FileOutputStream
 
 class AudioHelper(private val context: Context) {
+
     private var mediaRecorder: MediaRecorder? = null
     private var mediaPlayer: MediaPlayer? = null
     private var currentRecordingFile: File? = null
 
+    // --- Recording ---
+
     fun startRecording(): File? {
         try {
-            val cacheDir = context.cacheDir
-            val audioFile = File.createTempFile("voice_sample_", ".aac", cacheDir)
-            currentRecordingFile = audioFile
+            stopRecording()
+            
+            // Create a temporary file in the cache directory
+            val outputDir = context.cacheDir
+            val outputFile = File.createTempFile("recording_", ".mp4", outputDir)
+            currentRecordingFile = outputFile
 
-            val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 MediaRecorder(context)
             } else {
                 @Suppress("DEPRECATION")
                 MediaRecorder()
-            }
-
-            recorder.apply {
+            }.apply {
                 setAudioSource(MediaRecorder.AudioSource.MIC)
                 setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                 setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setAudioEncodingBitRate(128000)
-                setAudioSamplingRate(44100)
-                setOutputFile(audioFile.absolutePath)
+                setOutputFile(outputFile.absolutePath)
                 prepare()
                 start()
             }
-            mediaRecorder = recorder
-            return audioFile
+
+            Log.d("AudioHelper", "Recording started: ${outputFile.absolutePath}")
+            return outputFile
         } catch (e: Exception) {
             Log.e("AudioHelper", "Failed to start recording", e)
+            mediaRecorder?.release()
+            mediaRecorder = null
             return null
+        }
+    }
+
+    fun pauseRecording() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            try {
+                mediaRecorder?.pause()
+                Log.d("AudioHelper", "Recording paused")
+            } catch (e: Exception) {
+                Log.e("AudioHelper", "Failed to pause recording", e)
+            }
+        }
+    }
+
+    fun resumeRecording() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            try {
+                mediaRecorder?.resume()
+                Log.d("AudioHelper", "Recording resumed")
+            } catch (e: Exception) {
+                Log.e("AudioHelper", "Failed to resume recording", e)
+            }
+        }
+    }
+
+    fun stopRecording() {
+        try {
+            mediaRecorder?.apply {
+                stop()
+                release()
+            }
+        } catch (e: Exception) {
+            Log.e("AudioHelper", "Error stopping transmitter / recorder", e)
+        } finally {
+            mediaRecorder = null
         }
     }
 
@@ -53,87 +93,47 @@ class AudioHelper(private val context: Context) {
         }
     }
 
-    fun pauseRecording() {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                mediaRecorder?.pause()
-            }
-        } catch (e: Exception) {
-            Log.e("AudioHelper", "Failed to pause recording", e)
-        }
-    }
+    // --- Playback ---
 
-    fun resumeRecording() {
+    fun playAudio(file: File, onCompletion: () -> Unit) {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                mediaRecorder?.resume()
-            }
-        } catch (e: Exception) {
-            Log.e("AudioHelper", "Failed to resume recording", e)
-        }
-    }
-
-    fun stopRecording() {
-        try {
-            mediaRecorder?.apply {
-                stop()
-                release()
-            }
-        } catch (e: Exception) {
-            Log.e("AudioHelper", "Failed to stop recording", e)
-        } finally {
-            mediaRecorder = null
-        }
-    }
-
-    fun playAudio(file: File, onComplete: () -> Unit = {}) {
-        stopPlayback()
-        try {
+            stopPlayback()
             mediaPlayer = MediaPlayer().apply {
                 setDataSource(file.absolutePath)
                 prepare()
                 start()
                 setOnCompletionListener {
-                    onComplete()
+                    onCompletion()
                     stopPlayback()
                 }
             }
+            Log.d("AudioHelper", "Playing: ${file.absolutePath}")
         } catch (e: Exception) {
             Log.e("AudioHelper", "Failed to play audio file", e)
+            onCompletion()
         }
     }
 
-    fun playBase64Audio(base64Data: String, onComplete: () -> Unit = {}) {
-        stopPlayback()
+    fun stopPlayback() {
         try {
-            val audioBytes = Base64.decode(base64Data, Base64.DEFAULT)
-            val tempFile = File.createTempFile("synth_", ".mp3", context.cacheDir)
-            FileOutputStream(tempFile).use { fos ->
-                fos.write(audioBytes)
+            mediaPlayer?.apply {
+                if (isPlaying) {
+                    stop()
+                }
+                release()
             }
-            playAudio(tempFile, onComplete)
         } catch (e: Exception) {
-            Log.e("AudioHelper", "Failed to play base64 audio", e)
+            Log.e("AudioHelper", "Error releasing MediaPlayer", e)
+        } finally {
+            mediaPlayer = null
         }
     }
 
-    fun saveBase64ToPersistentFile(base64Data: String, fileNamePrefix: String): File? {
+    fun isPlaybackPlaying(): Boolean {
         return try {
-            val audioBytes = Base64.decode(base64Data, Base64.DEFAULT)
-            val outputDir = File(context.filesDir, "cloned_voices")
-            if (!outputDir.exists()) {
-                outputDir.mkdirs()
-            }
-            val cleanPrefix = fileNamePrefix.filter { it.isLetterOrDigit() || it == '_' || it == '-' }
-            val formattedPrefix = if (cleanPrefix.isBlank()) "cloned" else cleanPrefix
-            val targetFile = File(outputDir, "${formattedPrefix}_${System.currentTimeMillis()}.mp3")
-            FileOutputStream(targetFile).use { fos ->
-                fos.write(audioBytes)
-            }
-            targetFile
+            mediaPlayer?.isPlaying ?: false
         } catch (e: Exception) {
-            Log.e("AudioHelper", "Failed to save base64 to persistent file", e)
-            null
+            false
         }
     }
 
@@ -153,36 +153,50 @@ class AudioHelper(private val context: Context) {
         }
     }
 
-    fun isPlaybackPlaying(): Boolean {
-        return try {
-            mediaPlayer?.isPlaying ?: false
-        } catch (e: Exception) {
-            false
-        }
-    }
+    // --- Base64 & Persistence Helpers ---
 
-    fun stopPlayback() {
-        try {
-            mediaPlayer?.apply {
-                if (isPlaying) {
-                    stop()
-                }
-                release()
-            }
-        } catch (e: Exception) {
-            Log.e("AudioHelper", "Failed to stop playback", e)
-        } finally {
-            mediaPlayer = null
-        }
-    }
-
-    fun fileToBase64(file: File): String? {
+    fun fileToBase64(file: File): String {
         return try {
             val bytes = file.readBytes()
             Base64.encodeToString(bytes, Base64.NO_WRAP)
         } catch (e: Exception) {
-            Log.e("AudioHelper", "Failed to convert file to base64" + e.message, e)
+            Log.e("AudioHelper", "Failed to convert file to base64", e)
+            ""
+        }
+    }
+
+    fun saveBase64ToPersistentFile(base64: String, prefix: String): File? {
+        return try {
+            val bytes = Base64.decode(base64, Base64.DEFAULT)
+            val persistentDir = File(context.filesDir, "cloned_voices")
+            if (!persistentDir.exists()) {
+                persistentDir.mkdirs()
+            }
+            val sanitizedPrefix = prefix.replace(Regex("[^a-zA-Z0-9_]"), "_")
+            val persistentFile = File(persistentDir, "gen_${sanitizedPrefix}_${System.currentTimeMillis()}.mp3")
+            FileOutputStream(persistentFile).use { fos ->
+                fos.write(bytes)
+            }
+            Log.d("AudioHelper", "Saved base64 audio to: ${persistentFile.absolutePath}")
+            persistentFile
+        } catch (e: Exception) {
+            Log.e("AudioHelper", "Failed to save base64 to file", e)
             null
+        }
+    }
+
+    fun playBase64Audio(base64: String) {
+        try {
+            val bytes = Base64.decode(base64, Base64.DEFAULT)
+            val tempFile = File.createTempFile("temp_base64_play_", ".mp3", context.cacheDir)
+            FileOutputStream(tempFile).use { fos ->
+                fos.write(bytes)
+            }
+            playAudio(tempFile) {
+                tempFile.delete()
+            }
+        } catch (e: Exception) {
+            Log.e("AudioHelper", "Failed to play base64 audio directly", e)
         }
     }
 }
