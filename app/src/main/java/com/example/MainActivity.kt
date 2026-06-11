@@ -89,6 +89,12 @@ fun VoiceClonerAppScreen(
     val recordingDurationSec by viewModel.recordingDurationSec.collectAsStateWithLifecycle()
     val liveAmplitude by viewModel.liveAmplitude.collectAsStateWithLifecycle()
 
+    val recentGenerations by viewModel.recentGenerations.collectAsStateWithLifecycle()
+    val isPlayingResultId by viewModel.isPlayingResultId.collectAsStateWithLifecycle()
+    val playbackProgress by viewModel.playbackProgress.collectAsStateWithLifecycle()
+    val playbackElapsedText by viewModel.playbackElapsedText.collectAsStateWithLifecycle()
+    val playbackDurationText by viewModel.playbackDurationText.collectAsStateWithLifecycle()
+
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
@@ -183,7 +189,7 @@ fun VoiceClonerAppScreen(
                     Text(
                         text = if (hasApiKey) "מפתח מחובר" else "מפתח חסר .env",
                         fontSize = 11.sp,
-                        color = if (hasApiKey) Color(0xFF81C784) else Color(0xFFFFB74D),
+                        color = if (hasApiKey) Color(0xFF2E7D32) else Color(0xFFD84315),
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -498,30 +504,69 @@ fun VoiceClonerAppScreen(
 
                                         Spacer(modifier = Modifier.height(8.dp))
 
-                                        // Listen to chosen sample button (real real-time listening of processed audio context)
-                                        Button(
-                                            onClick = {
-                                                if (isPlayingRecorded) {
-                                                    viewModel.stopRecordedFile()
-                                                } else {
-                                                    viewModel.playRecordedFile()
-                                                }
-                                            },
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = if (isPlayingRecorded) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
-                                            ),
-                                            shape = RoundedCornerShape(8.dp),
-                                            modifier = Modifier.fillMaxWidth()
+                                        // Listen to chosen sample premium playback component
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+                                                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)), RoundedCornerShape(12.dp))
+                                                .padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                                         ) {
-                                            Icon(
-                                                imageVector = if (isPlayingRecorded) Icons.Default.Close else Icons.Default.PlayArrow,
-                                                contentDescription = null
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = if (isPlayingRecorded) "עצור שמיעת דגימה" else "שמע דגימה שנטענה",
-                                                fontWeight = FontWeight.Bold
-                                            )
+                                            IconButton(
+                                                onClick = {
+                                                    if (isPlayingRecorded) {
+                                                        viewModel.stopRecordedFile()
+                                                    } else {
+                                                        viewModel.playRecordedFile()
+                                                    }
+                                                },
+                                                modifier = Modifier
+                                                    .size(44.dp)
+                                                    .clip(CircleShape)
+                                                    .background(
+                                                        if (isPlayingRecorded) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
+                                                    )
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (isPlayingRecorded) Icons.Default.Close else Icons.Default.PlayArrow,
+                                                    contentDescription = "שמע דגימה",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                            }
+
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = if (isPlayingRecorded) "מנגן דגימת קול..." else "שמע דגימת שנטענה",
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                    Text(
+                                                        text = if (isPlayingRecorded) "$playbackElapsedText / $playbackDurationText" else "00:00",
+                                                        fontSize = 11.sp,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                LinearProgressIndicator(
+                                                    progress = { if (isPlayingRecorded) playbackProgress else 0f },
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(6.dp)
+                                                        .clip(RoundedCornerShape(3.dp)),
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -739,6 +784,7 @@ fun VoiceClonerAppScreen(
                     }
                 } else {
                     items(profiles) { profile ->
+                        val profileGenerations = recentGenerations.filter { it.profileId == profile.id }
                         VoiceProfileCard(
                             profile = profile,
                             isPlaying = isPlayingProfileId == profile.id,
@@ -759,7 +805,12 @@ fun VoiceClonerAppScreen(
                             onSynthesize = { text ->
                                 viewModel.synthesizeText(text, profile)
                             },
-                            onDelete = { viewModel.deleteProfile(profile.id) }
+                            onDelete = { viewModel.deleteProfile(profile.id) },
+                            recentGenerations = profileGenerations,
+                            isPlayingResultId = isPlayingResultId,
+                            onPlayResultSample = { viewModel.playResultSample(it) },
+                            onStopResultSample = { viewModel.stopResultSample() },
+                            onDeleteResult = { viewModel.deleteResult(it) }
                         )
                     }
                 }
@@ -780,8 +831,14 @@ fun VoiceProfileCard(
     onStopSample: () -> Unit,
     onToggleExpand: () -> Unit,
     onSynthesize: (String) -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    recentGenerations: List<com.example.data.VoiceGenerationResult>,
+    isPlayingResultId: Int?,
+    onPlayResultSample: (com.example.data.VoiceGenerationResult) -> Unit,
+    onStopResultSample: () -> Unit,
+    onDeleteResult: (com.example.data.VoiceGenerationResult) -> Unit
 ) {
+    val context = LocalContext.current
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -854,6 +911,9 @@ fun VoiceProfileCard(
                 TraitChip(label = "קצב", value = profile.pace, color = MaterialTheme.colorScheme.tertiary)
                 TraitChip(label = "אווירה", value = profile.vibe, color = Color(0xFFA5D6A7))
             }
+
+            // Expandable technical diagnostic voice analysis metrics dashboard
+            VoiceDashboardSection(profile = profile)
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -972,6 +1032,110 @@ fun VoiceProfileCard(
                             Text("ייצר קול ונגן דיבור משובט")
                         }
                     }
+
+                    // SWITCHER LIST OF RECENT CLONING HISTORY SAMPLES (Persistent Local State Storage)
+                    if (recentGenerations.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Text(
+                            text = "הפקות שמע קודמות מהקול המשובט (${recentGenerations.size}):",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        recentGenerations.forEach { result ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f))
+                                    .padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    IconButton(
+                                        onClick = {
+                                            if (isPlayingResultId == result.id) {
+                                                onStopResultSample()
+                                            } else {
+                                                onPlayResultSample(result)
+                                            }
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isPlayingResultId == result.id) Icons.Default.Close else Icons.Default.PlayArrow,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = result.inputText,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 2,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        val formattedDate = android.text.format.DateFormat.format("dd/MM/yyyy HH:mm", result.createdAt)
+                                        Text(
+                                            text = "נוצר ב: $formattedDate",
+                                            fontSize = 9.sp,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                        )
+                                    }
+                                }
+
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Download Button (API 29+ Safe Downloads)
+                                    IconButton(
+                                        onClick = {
+                                            downloadFileToDevice(
+                                                context = context,
+                                                sourceFile = java.io.File(result.audioPath),
+                                                displayName = "משבט-קול-${result.profileName}-${result.id}"
+                                            ) { success, message ->
+                                                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+                                            }
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ArrowDropDown,
+                                            contentDescription = "הורד שמע",
+                                            tint = MaterialTheme.colorScheme.secondary,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+
+                                    // Delete Button
+                                    IconButton(
+                                        onClick = { onDeleteResult(result) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "מחק הפקה",
+                                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1005,7 +1169,7 @@ fun RowScope.TraitChip(label: String, value: String, color: Color) {
                 text = value,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Black,
-                color = SoftWhite,
+                color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center
             )
         }
@@ -1068,3 +1232,218 @@ fun SoundWaveVisualizer(
 }
 
 val SoftWhite = Color(0xFFE5E7EB)
+
+@Composable
+fun VoiceDashboardSection(profile: VoiceProfile) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
+        ),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = "לוח בקרה וניתוח תדרי קול",
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(10.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "תדר קול ממוצע:",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "${profile.frequencyHz} Hz",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(6.dp))
+            
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(18.dp)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+            ) {
+                Row(modifier = Modifier.fillMaxSize()) {
+                    Box(modifier = Modifier.weight(1f).fillMaxHeight().background(Color(0x111E88E5)), contentAlignment = Alignment.Center) {
+                        Text("בס (נמוך)", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    }
+                    Box(modifier = Modifier.weight(1f).fillMaxHeight().background(Color(0x1143A047)), contentAlignment = Alignment.Center) {
+                        Text("בריטון", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    }
+                    Box(modifier = Modifier.weight(1f).fillMaxHeight().background(Color(0x11E53935)), contentAlignment = Alignment.Center) {
+                        Text("סופרן", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    }
+                }
+                
+                val fraction = ((profile.frequencyHz - 60f) / 220f).coerceIn(0f, 1f)
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(fraction)
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                    MaterialTheme.colorScheme.primary
+                                )
+                            )
+                        )
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(10.dp))
+            
+            Column(
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                MetricBarItem(label = "חיתוך דיבור ומאפייני הברה (Articulation/חיתוך)", value = profile.clarityScore, color = MaterialTheme.colorScheme.primary)
+                MetricBarItem(label = "צורת הגייה ודיוק פונטי (Pronunciation/הגייה)", value = profile.pronunciationClarity, color = MaterialTheme.colorScheme.secondary)
+                MetricBarItem(label = "אינטונציה ומנגינת דיבור (Intonation/התנגנות)", value = profile.intonationScore, color = MaterialTheme.colorScheme.tertiary)
+                MetricBarItem(label = "סדירות נשימה והפסקות דיבור (Breathing/נשימה)", value = profile.breathPauseScore, color = Color(0xFF66BB6A))
+                MetricBarItem(label = "מדד רעש רקע ועיוותי שפה (Noise/عيوותים)", value = profile.distortionLevel, inverted = true, color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+}
+
+@Composable
+fun MetricBarItem(label: String, value: Int, inverted: Boolean = false, color: Color) {
+    val displayedPercentage = if (inverted) 100 - value else value
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
+            Text(
+                text = if (inverted) "$value% (נקי: $displayedPercentage%)" else "$value%",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (inverted && value > 30) MaterialTheme.colorScheme.error else color
+            )
+        }
+        Spacer(modifier = Modifier.height(2.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            LinearProgressIndicator(
+                progress = { value.toFloat() / 100f },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp)),
+                color = color,
+                trackColor = color.copy(alpha = 0.12f)
+            )
+            val qualityLabel = when {
+                inverted && value < 15 -> "מעולה"
+                inverted && value < 30 -> "טוב"
+                inverted -> "רעשי רקע"
+                value > 85 -> "מצוין"
+                value > 70 -> "טוב מאוד"
+                value > 50 -> "בינוני"
+                else -> "נמוך"
+            }
+            Text(
+                text = qualityLabel,
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold,
+                color = color,
+                modifier = Modifier.width(42.dp),
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+fun downloadFileToDevice(
+    context: android.content.Context,
+    sourceFile: java.io.File,
+    displayName: String,
+    onResult: (Boolean, String) -> Unit
+) {
+    if (!sourceFile.exists()) {
+        onResult(false, "קובץ השמע המשובט אינו זמין להורדה")
+        return
+    }
+    
+    try {
+        val resolver = context.contentResolver
+        val contentValues = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, "$displayName.mp3")
+            put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "audio/mpeg")
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+                put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+        }
+        
+        val uri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+        } else {
+            @Suppress("DEPRECATION")
+            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            if (!downloadsDir.exists()) downloadsDir.mkdirs()
+            val targetFile = java.io.File(downloadsDir, "$displayName.mp3")
+            android.net.Uri.fromFile(targetFile)
+        }
+        
+        if (uri == null) {
+            onResult(false, "כשל ביצירת קובץ ההורדה במערכת")
+            return
+        }
+        
+        resolver.openOutputStream(uri)?.use { output ->
+            sourceFile.inputStream().use { input ->
+                input.copyTo(output)
+            }
+        }
+        
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            contentValues.clear()
+            contentValues.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+            resolver.update(uri, contentValues, null, null)
+        }
+        
+        onResult(true, "הורדה הושלמה! הקובץ נשמר בתיקיית ההורדות של המכשיר.")
+    } catch (e: Exception) {
+        android.util.Log.e("Download", "Failed to download", e)
+        onResult(false, "כשל הורדה: ${e.message}")
+    }
+}

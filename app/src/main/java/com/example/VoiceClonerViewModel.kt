@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.AppDatabase
 import com.example.data.VoiceProfile
+import com.example.data.VoiceGenerationResult
 import com.example.utils.AudioHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,12 +37,70 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
             initialValue = emptyList()
         )
 
+    // Recent Voice Generations (Persisted Results) State Flow
+    val recentGenerations: StateFlow<List<VoiceGenerationResult>> = voiceDao.getAllGenerationResults()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    private val _isPlayingResultId = MutableStateFlow<Int?>(null)
+    val isPlayingResultId: StateFlow<Int?> = _isPlayingResultId.asStateFlow()
+
+    // Recorded file playback tracking state flows
+    private val _playbackProgress = MutableStateFlow(0f)
+    val playbackProgress: StateFlow<Float> = _playbackProgress.asStateFlow()
+
+    private val _playbackElapsedText = MutableStateFlow("00:00")
+    val playbackElapsedText: StateFlow<String> = _playbackElapsedText.asStateFlow()
+
+    private val _playbackDurationText = MutableStateFlow("00:00")
+    val playbackDurationText: StateFlow<String> = _playbackDurationText.asStateFlow()
+
+    private var playbackProgressJob: kotlinx.coroutines.Job? = null
+
+    private fun startPlaybackProgressTracker(onCompletion: () -> Unit) {
+        playbackProgressJob?.cancel()
+        playbackProgressJob = viewModelScope.launch(Dispatchers.Main) {
+            // Wait brief moment for mediaplayer initialization
+            kotlinx.coroutines.delay(100)
+            while (audioHelper.isPlaybackPlaying()) {
+                val current = audioHelper.getPlaybackPosition()
+                val total = audioHelper.getPlaybackDuration()
+                if (total > 0) {
+                    _playbackProgress.value = current.toFloat() / total.toFloat()
+                    val curSec = current / 1000
+                    val totSec = total / 1000
+                    _playbackElapsedText.value = String.format("%02d:%02d", curSec / 60, curSec % 60)
+                    _playbackDurationText.value = String.format("%02d:%02d", totSec / 60, totSec % 60)
+                }
+                kotlinx.coroutines.delay(100)
+            }
+            _playbackProgress.value = 0f
+            _playbackElapsedText.value = "00:00"
+            _playbackDurationText.value = "00:00"
+            onCompletion()
+        }
+    }
+
     // Recording States
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording.asStateFlow()
 
+    private val _isRecordingPaused = MutableStateFlow(false)
+    val isRecordingPaused: StateFlow<Boolean> = _isRecordingPaused.asStateFlow()
+
+    private val _recordingDurationSec = MutableStateFlow(0)
+    val recordingDurationSec: StateFlow<Int> = _recordingDurationSec.asStateFlow()
+
+    private val _liveAmplitude = MutableStateFlow(0f)
+    val liveAmplitude: StateFlow<Float> = _liveAmplitude.asStateFlow()
+
     private val _recordedFile = MutableStateFlow<File?>(null)
     val recordedFile: StateFlow<File?> = _recordedFile.asStateFlow()
+
+    private var recordingJob: kotlinx.coroutines.Job? = null
 
     // Analysis States
     private val _isAnalyzing = MutableStateFlow(false)
@@ -89,17 +148,55 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
     fun startRecordVoice() {
         _recordedFile.value = null
         _analysisError.value = null
+        _recordingDurationSec.value = 0
+        _liveAmplitude.value = 0f
+        _isRecordingPaused.value = false
         lastRecordedFile = audioHelper.startRecording()
         if (lastRecordedFile != null) {
             _isRecording.value = true
+            recordingJob = viewModelScope.launch(Dispatchers.Main) {
+                var ticks = 0
+                while (_isRecording.value) {
+                    kotlinx.coroutines.delay(100)
+                    if (!_isRecordingPaused.value) {
+                        ticks += 100
+                        if (ticks >= 1000) {
+                            _recordingDurationSec.value += 1
+                            ticks = 0
+                        }
+                        val rawAmp = audioHelper.getMaxAmplitude()
+                        val normalized = (rawAmp.toFloat() / 32768f).coerceIn(0f, 1f)
+                        _liveAmplitude.value = normalized
+                    } else {
+                        _liveAmplitude.value = 0f
+                    }
+                }
+            }
         } else {
             _analysisError.value = "שגיאה באתחול המיקרופון"
         }
     }
 
+    fun pauseRecordVoice() {
+        if (_isRecording.value && !_isRecordingPaused.value) {
+            audioHelper.pauseRecording()
+            _isRecordingPaused.value = true
+        }
+    }
+
+    fun resumeRecordVoice() {
+        if (_isRecording.value && _isRecordingPaused.value) {
+            audioHelper.resumeRecording()
+            _isRecordingPaused.value = false
+        }
+    }
+
     fun stopRecordVoice() {
+        recordingJob?.cancel()
+        recordingJob = null
         audioHelper.stopRecording()
         _isRecording.value = false
+        _isRecordingPaused.value = false
         _recordedFile.value = lastRecordedFile
     }
 
@@ -113,12 +210,22 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
             _isPlayingRecorded.value = true
             audioHelper.playAudio(file) {
                 _isPlayingRecorded.value = false
+                playbackProgressJob?.cancel()
+                _playbackProgress.value = 0f
+                _playbackElapsedText.value = "00:00"
+                _playbackDurationText.value = "00:00"
+            }
+            startPlaybackProgressTracker {
+                _isPlayingRecorded.value = false
             }
         }
     }
 
     fun stopRecordedFile() {
         audioHelper.stopPlayback()
+        playbackProgressJob?.cancel()
+        _playbackProgress.value = 0f
+        _playbackElapsedText.value = "00:00"
         _isPlayingRecorded.value = false
     }
 
@@ -159,6 +266,11 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                 _isPlayingProfileId.value = profile.id
                 audioHelper.playAudio(file) {
                     _isPlayingProfileId.value = null
+                    playbackProgressJob?.cancel()
+                    _playbackProgress.value = 0f
+                }
+                startPlaybackProgressTracker {
+                    _isPlayingProfileId.value = null
                 }
             } else {
                 _analysisError.value = "קובץ ההקלטה לא נמצא"
@@ -168,12 +280,53 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun stopProfileSample() {
         audioHelper.stopPlayback()
+        playbackProgressJob?.cancel()
+        _playbackProgress.value = 0f
         _isPlayingProfileId.value = null
+    }
+
+    fun playResultSample(result: VoiceGenerationResult) {
+        val file = File(result.audioPath)
+        if (file.exists()) {
+            _isPlayingResultId.value = result.id
+            audioHelper.playAudio(file) {
+                _isPlayingResultId.value = null
+                playbackProgressJob?.cancel()
+                _playbackProgress.value = 0f
+            }
+            startPlaybackProgressTracker {
+                _isPlayingResultId.value = null
+            }
+        } else {
+            _synthesizeError.value = "קובץ השמע המשובט לא נמצא במכשיר"
+        }
+    }
+
+    fun stopResultSample() {
+        audioHelper.stopPlayback()
+        playbackProgressJob?.cancel()
+        _playbackProgress.value = 0f
+        _isPlayingResultId.value = null
+    }
+
+    fun deleteResult(result: VoiceGenerationResult) {
+        viewModelScope.launch {
+            try {
+                val file = File(result.audioPath)
+                if (file.exists()) {
+                    file.delete()
+                }
+            } catch (e: Exception) {
+                Log.e("VoiceClonerViewModel", "Failed to delete generated result file", e)
+            }
+            voiceDao.deleteGenerationResultById(result.id)
+        }
     }
 
     fun deleteProfile(id: Int) {
         viewModelScope.launch {
             voiceDao.deleteProfileById(id)
+            voiceDao.deleteResultsByProfileId(id)
         }
     }
 
@@ -205,11 +358,17 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                                 put(JSONObject().apply {
                                     put("text", "Analyze the physical voice traits of this speaking sample. Provide your analysis response output in Hebrew using EXACTLY the following JSON format: " +
                                             "{\n" +
-                                            "  \"pitch\": \"(גובה קול: נמוך / בינוני / גבוה)\",\n" +
-                                            "  \"tone\": \"(גוון קול: חם / מתכתי / צרוד / נקי etc. up to 3 words)\",\n" +
-                                            "  \"vibe\": \"(אווירה: רגוע / סמכותי / ידידותי / אינטנסיבי)\",\n" +
-                                            "  \"pace\": \"(קצב: איטי / מתון / מהיר)\",\n" +
-                                            "  \"geminiVoiceName\": \"(Kore / Puck / Fenrir / Aoede / Charon - Choose the one template voice close to this sample)\"\n" +
+                                            "  \"pitch\": \"(Hebrew descriptor: גובה קול, למשל 'נמוך וסמכותי' או 'גבוה ודק')\",\n" +
+                                            "  \"tone\": \"(Hebrew descriptor: גוון קול, למשל 'חם ורך' / 'עמוק ומלא')\",\n" +
+                                            "  \"vibe\": \"(Hebrew descriptor: אווירה, למשל 'רגוע ומזמין' / 'נמרץ וחד')\",\n" +
+                                            "  \"pace\": \"(Hebrew descriptor: קצב, למשל 'מתון ומדויק' / 'איטי וברור')\",\n" +
+                                            "  \"geminiVoiceName\": \"(Kore / Puck / Fenrir / Aoede / Charon - Choose the one template voice close to this sample)\",\n" +
+                                            "  \"frequencyHz\": (Integer estimating average voice frequency in Hz, male: 85 to 175, female: 165 to 255),\n" +
+                                            "  \"clarityScore\": (Integer 0-100 indicating quality of articulation and speech clarity / מדד חיתוך דיבור),\n" +
+                                            "  \"pronunciationClarity\": (Integer 0-100 indicating pronunciation accuracy / צורת הגייה),\n" +
+                                            "  \"intonationScore\": (Integer 0-100 indicating melodiousness and intonation variation / אינטונציה והתנגנות),\n" +
+                                            "  \"breathPauseScore\": (Integer 0-100 indicating respiratory control and breath breaks / הפסקות נשימה),\n" +
+                                            "  \"distortionLevel\": (Integer 0-100 indicating background signal noise or speech distortions / עיוותי שפה ורעש)\n" +
                                             "}")
                                 })
                                 put(JSONObject().apply {
@@ -252,6 +411,13 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                 val vibe = parsedAnalysis.optString("vibe", "רגוע")
                 val pace = parsedAnalysis.optString("pace", "מתון")
                 val geminiVoiceName = parsedAnalysis.optString("geminiVoiceName", "Puck")
+                
+                val frequencyHz = parsedAnalysis.optInt("frequencyHz", if (gender == "זכר") 120 else 210)
+                val clarityScore = parsedAnalysis.optInt("clarityScore", 85)
+                val pronunciationClarity = parsedAnalysis.optInt("pronunciationClarity", 80)
+                val intonationScore = parsedAnalysis.optInt("intonationScore", 78)
+                val breathPauseScore = parsedAnalysis.optInt("breathPauseScore", 85)
+                val distortionLevel = parsedAnalysis.optInt("distortionLevel", 12)
 
                 val newProfile = VoiceProfile(
                     name = name,
@@ -262,7 +428,13 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                     tone = tone,
                     vibe = vibe,
                     pace = pace,
-                    geminiVoiceName = geminiVoiceName
+                    geminiVoiceName = geminiVoiceName,
+                    frequencyHz = frequencyHz,
+                    clarityScore = clarityScore,
+                    pronunciationClarity = pronunciationClarity,
+                    intonationScore = intonationScore,
+                    breathPauseScore = breathPauseScore,
+                    distortionLevel = distortionLevel
                 )
 
                 voiceDao.insertProfile(newProfile)
@@ -361,7 +533,25 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
 
                 withContext(Dispatchers.Main) {
                     _isSynthesizing.value = false
-                    audioHelper.playBase64Audio(foundAudioBase64)
+                    
+                    // Decoded audio base64 is saved permanently to app storage and logged inside DB
+                    val persistentFile = audioHelper.saveBase64ToPersistentFile(foundAudioBase64, profile.name)
+                    if (persistentFile != null) {
+                        val newResult = VoiceGenerationResult(
+                            profileId = profile.id,
+                            profileName = profile.name,
+                            inputText = text,
+                            audioPath = persistentFile.absolutePath
+                        )
+                        viewModelScope.launch(Dispatchers.IO) {
+                            voiceDao.insertGenerationResult(newResult)
+                        }
+                        
+                        // Automatically play the newly generated file nicely
+                        playResultSample(newResult)
+                    } else {
+                        audioHelper.playBase64Audio(foundAudioBase64)
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("VoiceClonerViewModel", "Synthesis failed", e)
