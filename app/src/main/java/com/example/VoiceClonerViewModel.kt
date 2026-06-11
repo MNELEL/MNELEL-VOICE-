@@ -103,6 +103,55 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
         _recordedFile.value = lastRecordedFile
     }
 
+    // Play/Stop recorded or uploaded file before cloning
+    private val _isPlayingRecorded = MutableStateFlow(false)
+    val isPlayingRecorded: StateFlow<Boolean> = _isPlayingRecorded.asStateFlow()
+
+    fun playRecordedFile() {
+        val file = _recordedFile.value
+        if (file != null && file.exists()) {
+            _isPlayingRecorded.value = true
+            audioHelper.playAudio(file) {
+                _isPlayingRecorded.value = false
+            }
+        }
+    }
+
+    fun stopRecordedFile() {
+        audioHelper.stopPlayback()
+        _isPlayingRecorded.value = false
+    }
+
+    fun clearRecordedFile() {
+        stopRecordedFile()
+        _recordedFile.value = null
+    }
+
+    fun uploadAudioStream(inputStream: java.io.InputStream, fileName: String) {
+        _recordedFile.value = null
+        _analysisError.value = null
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val cacheDir = getApplication<Application>().cacheDir
+                val extension = if (fileName.contains(".")) fileName.substringAfterLast(".") else "aac"
+                val tempFile = File.createTempFile("uploaded_", ".$extension", cacheDir)
+                inputStream.use { input ->
+                    tempFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                withContext(Dispatchers.Main) {
+                    _recordedFile.value = tempFile
+                }
+            } catch (e: Exception) {
+                Log.e("VoiceClonerViewModel", "Failed to upload fileStream", e)
+                withContext(Dispatchers.Main) {
+                    _analysisError.value = "כשל בהעלאת קובץ השמע: ${e.message}"
+                }
+            }
+        }
+    }
+
     fun playProfileSample(profile: VoiceProfile) {
         if (profile.audioPath != null) {
             val file = File(profile.audioPath)
