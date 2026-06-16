@@ -155,6 +155,27 @@ class AudioHelper(private val context: Context) {
 
     // --- Base64 & Persistence Helpers ---
 
+    fun saveFileToPersistentStorage(file: File, prefix: String): File? {
+        return try {
+            val persistentDir = File(context.filesDir, "saved_recordings")
+            if (!persistentDir.exists()) {
+                persistentDir.mkdirs()
+            }
+            val sanitizedPrefix = prefix.replace(Regex("[^a-zA-Z0-9_]"), "_")
+            val persistentFile = File(persistentDir, "record_${sanitizedPrefix}_${System.currentTimeMillis()}.mp4")
+            file.inputStream().use { input ->
+                persistentFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            Log.d("AudioHelper", "Saved recorded audio to persistent storage: ${persistentFile.absolutePath}")
+            persistentFile
+        } catch (e: Exception) {
+            Log.e("AudioHelper", "Failed to save file to persistent storage", e)
+            null
+        }
+    }
+
     fun fileToBase64(file: File): String {
         return try {
             val bytes = file.readBytes()

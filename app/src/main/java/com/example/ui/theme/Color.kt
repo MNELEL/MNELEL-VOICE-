@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.Color
 val LightBg = Color(0xFFF9FAFC)        // Warm off-white, pleasant to the eye
 val LightSurface = Color(0xFFFFFFFF)   // Pure white for card components
 val LightPrimary = Color(0xFF6366F1)   // Warm modern Indigo
+val BrandNavy = Color(0xFF162544)      // Dark Navy for buttons
 val LightSecondary = Color(0xFFEC4899) // Soft pleasant Rose/Pink
 val LightTertiary = Color(0xFF14B8A6)  // Friendly Soft Teal
 val DarkCharcoal = Color(0xFF1F2937)   // Clean rounded charcoal for ultra-clear text

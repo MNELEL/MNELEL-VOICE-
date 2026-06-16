@@ -37,6 +37,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.VoiceProfile
 import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.theme.BrandNavy
+import com.example.ui.theme.LightBg
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -84,6 +86,8 @@ fun VoiceClonerAppScreen(
     val context = LocalContext.current
     val isPlayingRecorded by viewModel.isPlayingRecorded.collectAsStateWithLifecycle()
     var isUploadMode by remember { mutableStateOf(false) }
+    var showImportDialog by remember { mutableStateOf(false) }
+    var importJsonText by remember { mutableStateOf("") }
 
     val isRecordingPaused by viewModel.isRecordingPaused.collectAsStateWithLifecycle()
     val recordingDurationSec by viewModel.recordingDurationSec.collectAsStateWithLifecycle()
@@ -134,7 +138,7 @@ fun VoiceClonerAppScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(Brush.verticalGradient(listOf(Color.White, LightBg)))
             .padding(16.dp)
     ) {
         // App Header with API Key Connection Status Indicator (Answers "Is API client updated")
@@ -233,7 +237,7 @@ fun VoiceClonerAppScreen(
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(8.dp),
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (!isUploadMode) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                        containerColor = if (!isUploadMode) BrandNavy else Color.Transparent,
                                         contentColor = if (!isUploadMode) Color.White else MaterialTheme.colorScheme.onBackground
                                     ),
                                     contentPadding = PaddingValues(vertical = 10.dp)
@@ -247,7 +251,7 @@ fun VoiceClonerAppScreen(
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(8.dp),
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (isUploadMode) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                        containerColor = if (isUploadMode) BrandNavy else Color.Transparent,
                                         contentColor = if (isUploadMode) Color.White else MaterialTheme.colorScheme.onBackground
                                     ),
                                     contentPadding = PaddingValues(vertical = 10.dp)
@@ -290,7 +294,38 @@ fun VoiceClonerAppScreen(
                                                 fontWeight = FontWeight.Bold,
                                                 color = MaterialTheme.colorScheme.secondary
                                             ),
+                                            modifier = Modifier.padding(bottom = 6.dp)
+                                        )
+
+                                        val recordingProgress = (recordingDurationSec.toFloat() / 15f).coerceIn(0f, 1f)
+                                        LinearProgressIndicator(
+                                            progress = { recordingProgress },
+                                            modifier = Modifier
+                                                .fillMaxWidth(0.8f)
+                                                .height(6.dp)
+                                                .clip(RoundedCornerShape(3.dp)),
+                                            color = if (recordingProgress >= 1f) Color(0xFF10B981) else MaterialTheme.colorScheme.primary,
+                                            trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                                        )
+
+                                        Spacer(modifier = Modifier.height(4.dp))
+
+                                        Text(
+                                            text = when {
+                                                recordingDurationSec < 5 -> "הקלטה קצרה מדי לעיבוד מהימן (מינימום 5 שניות) ⚠️"
+                                                recordingDurationSec < 15 -> "אוסף מאפייני דיבור... מומלץ להקליט 15 שניות ($recordingDurationSec/15) 🎙️"
+                                                else -> "נאסף נפח קולי מצוין לשיבוט מדויק! ✨"
+                                            },
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (recordingProgress >= 1f) Color(0xFF10B981) else Color(0xFF718096),
+                                            textAlign = TextAlign.Center,
                                             modifier = Modifier.padding(bottom = 12.dp)
+                                        )
+
+                                        // Let's comment standard empty string so we don't have dangling statements
+                                        Spacer(
+                                            modifier = Modifier.size(0.dp)
                                         )
 
                                         Row(
@@ -391,7 +426,8 @@ fun VoiceClonerAppScreen(
                                     Spacer(modifier = Modifier.height(16.dp))
                                     Button(
                                         onClick = { micPermissionState.launchPermissionRequest() },
-                                        shape = RoundedCornerShape(12.dp)
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = BrandNavy)
                                     ) {
                                         Icon(imageVector = Icons.Default.Settings, contentDescription = null)
                                         Spacer(modifier = Modifier.width(8.dp))
@@ -631,7 +667,8 @@ fun VoiceClonerAppScreen(
                                         .fillMaxWidth()
                                         .height(50.dp)
                                         .testTag("analyze_button"),
-                                    shape = RoundedCornerShape(12.dp)
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = BrandNavy)
                                 ) {
                                     if (isAnalyzing) {
                                         CircularProgressIndicator(
@@ -737,12 +774,31 @@ fun VoiceClonerAppScreen(
 
                 // Section 2: Headline
                 item {
-                    Text(
-                        text = "פרופילי קול משובטים (${profiles.size})",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "פרופילי קול משובטים (${profiles.size})",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Button(
+                            onClick = { showImportDialog = true },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = BrandNavy.copy(alpha = 0.12f),
+                                contentColor = BrandNavy
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("ייבא חתימת קול 📥", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
 
                 // Empty state or profiles list
@@ -805,6 +861,16 @@ fun VoiceClonerAppScreen(
                             onSynthesize = { text ->
                                 viewModel.synthesizeText(text, profile)
                             },
+                            onLocalSynthesize = { text ->
+                                viewModel.synthesizeTextLocal(text, profile)
+                            },
+                            onExportClick = {
+                                val json = viewModel.exportProfileToJson(profile)
+                                val clipboardManager = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                val clip = android.content.ClipData.newPlainText("Voice Signature", json)
+                                clipboardManager.setPrimaryClip(clip)
+                                android.widget.Toast.makeText(context, "חתימת הקול '${profile.name}' הועתקה ללוח הזיכרון! 📋", android.widget.Toast.LENGTH_LONG).show()
+                            },
                             onDelete = { viewModel.deleteProfile(profile.id) },
                             recentGenerations = profileGenerations,
                             isPlayingResultId = isPlayingResultId,
@@ -815,6 +881,67 @@ fun VoiceClonerAppScreen(
                     }
                 }
             }
+        }
+
+        if (showImportDialog) {
+            AlertDialog(
+                onDismissRequest = { showImportDialog = false },
+                title = {
+                    Text(
+                        text = "ייבוא חתימת קול משובט 📥",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = BrandNavy
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "הדבק את קוד החתימה בפורמט JSON שיוצא בעבר:",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                        OutlinedTextField(
+                            value = importJsonText,
+                            onValueChange = { importJsonText = it },
+                            placeholder = { Text("הדבק כאן את חתימת ה-JSON של הדובר...") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(160.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            maxLines = 10
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (importJsonText.isNotBlank()) {
+                                viewModel.importProfileFromJson(
+                                    jsonStr = importJsonText,
+                                    onSuccess = { msg ->
+                                        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                                        showImportDialog = false
+                                        importJsonText = ""
+                                    },
+                                    onError = { err ->
+                                        android.widget.Toast.makeText(context, err, android.widget.Toast.LENGTH_LONG).show()
+                                    }
+                                )
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = BrandNavy)
+                    ) {
+                        Text("ייבא למכשיר")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showImportDialog = false }) {
+                        Text("ביטול")
+                    }
+                },
+                shape = RoundedCornerShape(16.dp)
+            )
         }
     }
 }
@@ -831,6 +958,8 @@ fun VoiceProfileCard(
     onStopSample: () -> Unit,
     onToggleExpand: () -> Unit,
     onSynthesize: (String) -> Unit,
+    onLocalSynthesize: (String) -> Unit,
+    onExportClick: () -> Unit,
     onDelete: () -> Unit,
     recentGenerations: List<com.example.data.VoiceGenerationResult>,
     isPlayingResultId: Int?,
@@ -887,15 +1016,30 @@ fun VoiceProfileCard(
                     }
                 }
 
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.testTag("delete_profile_${profile.id}")
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "מחק פרופיל",
-                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
-                    )
+                    IconButton(
+                        onClick = onExportClick
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "ייצוא חתימת קול",
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.testTag("delete_profile_${profile.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "מחק פרופיל",
+                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                        )
+                    }
                 }
             }
 
@@ -1010,26 +1154,48 @@ fun VoiceProfileCard(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    Button(
-                        onClick = { onSynthesize(synthText) },
-                        enabled = !isSynthesizing && synthText.isNotEmpty(),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .testTag("synth_submit_${profile.id}"),
-                        shape = RoundedCornerShape(12.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (isSynthesizing) {
-                            CircularProgressIndicator(
-                                color = Color.White,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("מייצר שמע קולי ב-AI...")
-                        } else {
-                            Icon(imageVector = Icons.Default.Send, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("ייצר קול ונגן דיבור משובט")
+                        Button(
+                            onClick = { onSynthesize(synthText) },
+                            enabled = !isSynthesizing && synthText.isNotEmpty(),
+                            modifier = Modifier
+                                .weight(1.1f)
+                                .height(46.dp)
+                                .testTag("synth_submit_${profile.id}"),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            if (isSynthesizing) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("מייצר קול...", fontSize = 11.sp)
+                            } else {
+                                Icon(imageVector = Icons.Default.Send, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("דיבור AI (שרת)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Button(
+                            onClick = { onLocalSynthesize(synthText) },
+                            enabled = !isSynthesizing && synthText.isNotEmpty(),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(46.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF10B981)
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("השמע עם TTS", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -1336,6 +1502,10 @@ fun VoiceDashboardSection(profile: VoiceProfile) {
                 MetricBarItem(label = "סדירות נשימה והפסקות דיבור (Breathing/נשימה)", value = profile.breathPauseScore, color = Color(0xFF66BB6A))
                 MetricBarItem(label = "מדד רעש רקע ועיוותי שפה (Noise/عيوותים)", value = profile.distortionLevel, inverted = true, color = MaterialTheme.colorScheme.error)
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            com.example.ui.AudioMetricsChart(profile = profile)
         }
     }
 }

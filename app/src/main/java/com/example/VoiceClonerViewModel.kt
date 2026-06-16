@@ -1,6 +1,7 @@
 package com.example
 
 import android.app.Application
+import android.speech.tts.TextToSpeech
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -23,12 +24,36 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 class VoiceClonerViewModel(application: Application) : AndroidViewModel(application) {
     private val database = AppDatabase.getDatabase(application)
     private val voiceDao = database.voiceDao()
     private val audioHelper = AudioHelper(application)
+
+    private var tts: TextToSpeech? = null
+    private val _isTtsReady = MutableStateFlow(false)
+    val isTtsReady: StateFlow<Boolean> = _isTtsReady.asStateFlow()
+
+    init {
+        try {
+            tts = TextToSpeech(application) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    val result = tts?.setLanguage(Locale("he", "IL"))
+                    if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                        Log.w("VoiceClonerViewModel", "Hebrew language is not supported. Trying fallback to US or default.")
+                        tts?.setLanguage(Locale.getDefault())
+                    }
+                    _isTtsReady.value = true
+                } else {
+                    Log.e("VoiceClonerViewModel", "TextToSpeech init status failed: $status")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("VoiceClonerViewModel", "Failed to construct TextToSpeech", e)
+        }
+    }
 
     val allProfiles: StateFlow<List<VoiceProfile>> = voiceDao.getAllProfiles()
         .stateIn(
@@ -419,11 +444,14 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                 val breathPauseScore = parsedAnalysis.optInt("breathPauseScore", 85)
                 val distortionLevel = parsedAnalysis.optInt("distortionLevel", 12)
 
+                val persistentFile = audioHelper.saveFileToPersistentStorage(file, name)
+                val finalAudioPath = persistentFile?.absolutePath ?: file.absolutePath
+
                 val newProfile = VoiceProfile(
                     name = name,
                     gender = gender,
                     description = description,
-                    audioPath = file.absolutePath,
+                    audioPath = finalAudioPath,
                     pitch = pitch,
                     tone = tone,
                     vibe = vibe,
@@ -563,9 +591,156 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun synthesizeTextLocal(text: String, profile: VoiceProfile) {
+        if (text.isBlank()) {
+            _synthesizeError.value = "אנא הזן טקסט לייצור קול"
+            return
+        }
+
+        _isSynthesizing.value = true
+        _synthesizeError.value = null
+
+        viewModelScope.launch(Dispatchers.Main) {
+            try {
+                val currentTts = tts
+                if (currentTts == null || !_isTtsReady.value) {
+                    throw IllegalStateException("מנוע הדיבור המקומי עדיין בטעינה או לא זמין")
+                }
+
+                // Map frequencyHz to a pitch multiplier
+                val pitchMultiplier: Float = when {
+                    profile.frequencyHz <= 100 -> 0.70f
+                    profile.frequencyHz <= 125 -> 0.82f
+                    profile.frequencyHz >= 210 -> 1.35f
+                    profile.frequencyHz >= 180 -> 1.20f
+                    else -> 1.0f
+                }
+                currentTts.setPitch(pitchMultiplier)
+
+                // Map pace description to speech rate multiplier
+                val rateMultiplier: Float = when {
+                    profile.pace.contains("מהיר") || profile.pace.contains("מהירה") || profile.pace.lowercase().contains("fast") -> 1.25f
+                    profile.pace.contains("איטי") || profile.pace.contains("איטית") || profile.pace.lowercase().contains("slow") -> 0.78f
+                    else -> 1.00f
+                }
+                currentTts.setSpeechRate(rateMultiplier)
+
+                // Trigger speaking using modern or deprecated method depending on API
+                val speechResult = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                    currentTts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "voice_cloner_tts_session")
+                } else {
+                    @Suppress("DEPRECATION")
+                    currentTts.speak(text, TextToSpeech.QUEUE_FLUSH, null)
+                }
+
+                if (speechResult == TextToSpeech.ERROR) {
+                    throw IllegalStateException("מנוע הדיבור המקומי נתקל בשגיאה בעת הדיבור")
+                }
+
+                // Also save to database history for traceability
+                val newResult = VoiceGenerationResult(
+                    profileId = profile.id,
+                    profileName = profile.name,
+                    inputText = text,
+                    audioPath = "local_tts_playback" // indicates dynamic native TTS playback
+                )
+                withContext(Dispatchers.IO) {
+                    voiceDao.insertGenerationResult(newResult)
+                }
+
+                _isSynthesizing.value = false
+            } catch (e: Exception) {
+                Log.e("VoiceClonerViewModel", "Local TTS synthesis failed", e)
+                _isSynthesizing.value = false
+                _synthesizeError.value = e.message ?: "שגיאה בהפעלת מנוע דיבור מקומי"
+            }
+        }
+    }
+
+    fun exportProfileToJson(profile: VoiceProfile): String {
+        return try {
+            val json = JSONObject().apply {
+                put("version", 1)
+                put("name", profile.name)
+                put("gender", profile.gender)
+                put("description", profile.description)
+                put("pitch", profile.pitch)
+                put("tone", profile.tone)
+                put("vibe", profile.vibe)
+                put("pace", profile.pace)
+                put("geminiVoiceName", profile.geminiVoiceName)
+                put("frequencyHz", profile.frequencyHz)
+                put("clarityScore", profile.clarityScore)
+                put("pronunciationClarity", profile.pronunciationClarity)
+                put("intonationScore", profile.intonationScore)
+                put("breathPauseScore", profile.breathPauseScore)
+                put("distortionLevel", profile.distortionLevel)
+            }
+            json.toString(2)
+        } catch (e: Exception) {
+            Log.e("VoiceClonerViewModel", "Failed to export profile to JSON", e)
+            ""
+        }
+    }
+
+    fun importProfileFromJson(jsonStr: String, onSuccess: (String) -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val json = JSONObject(jsonStr)
+                val name = json.getString("name")
+                val gender = json.optString("gender", "לא מוגדר")
+                val description = json.optString("description", "פרופיל מיובא")
+                val pitch = json.optString("pitch", "בינוני")
+                val tone = json.optString("tone", "חם")
+                val vibe = json.optString("vibe", "רגוע")
+                val pace = json.optString("pace", "מתון")
+                val geminiVoiceName = json.optString("geminiVoiceName", "Puck")
+                val frequencyHz = json.optInt("frequencyHz", 150)
+                val clarityScore = json.optInt("clarityScore", 85)
+                val pronunciationClarity = json.optInt("pronunciationClarity", 80)
+                val intonationScore = json.optInt("intonationScore", 78)
+                val breathPauseScore = json.optInt("breathPauseScore", 85)
+                val distortionLevel = json.optInt("distortionLevel", 12)
+
+                val newProfile = VoiceProfile(
+                    name = "$name (מיובא)",
+                    gender = gender,
+                    description = description,
+                    audioPath = null,
+                    pitch = pitch,
+                    tone = tone,
+                    vibe = vibe,
+                    pace = pace,
+                    geminiVoiceName = geminiVoiceName,
+                    frequencyHz = frequencyHz,
+                    clarityScore = clarityScore,
+                    pronunciationClarity = pronunciationClarity,
+                    intonationScore = intonationScore,
+                    breathPauseScore = breathPauseScore,
+                    distortionLevel = distortionLevel
+                )
+
+                voiceDao.insertProfile(newProfile)
+                withContext(Dispatchers.Main) {
+                    onSuccess("הפרופיל '$name' יובא בהצלחה בהתאמה לקול הדובר!")
+                }
+            } catch (e: Exception) {
+                Log.e("VoiceClonerViewModel", "Failed to import profile", e)
+                withContext(Dispatchers.Main) {
+                    onError("חתימת הקול אינה תקינה או חסרים נתונים")
+                }
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         audioHelper.stopRecording()
         audioHelper.stopPlayback()
+        try {
+            tts?.shutdown()
+        } catch (e: Exception) {
+            Log.e("VoiceClonerViewModel", "Error shutting down TTS", e)
+        }
     }
 }
