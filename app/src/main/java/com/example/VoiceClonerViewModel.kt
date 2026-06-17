@@ -328,7 +328,15 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
         audioHelper.stopRecording()
         _isRecording.value = false
         _isRecordingPaused.value = false
-        _recordedFile.value = lastRecordedFile
+        
+        if (_recordingDurationSec.value < 5) {
+            _analysisError.value = "ההקלטה קצרה מדי. אנא הקלט לפחות 5 שניות של דיבור."
+            lastRecordedFile?.delete()
+            lastRecordedFile = null
+            _recordedFile.value = null
+        } else {
+            _recordedFile.value = lastRecordedFile
+        }
     }
 
     // Play/Stop recorded or uploaded file before cloning

@@ -27,7 +27,8 @@ class AudioHelper(private val context: Context) {
             currentRecordingFile = outputFile
 
             mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                MediaRecorder(context)
+                val attributedContext = context.createAttributionContext("VoiceClonerTag")
+                MediaRecorder(attributedContext)
             } else {
                 @Suppress("DEPRECATION")
                 MediaRecorder()

@@ -1,0 +1,43 @@
+הנחיות למילוי הצהרת אבטחת נתונים (Data Safety) ב-Google Play Console:
+
+1. סקירה כללית:
+   - האם האפליקציה אוספת או משתפת נתוני משתמשים?
+     * תשובה: כן.
+   - האם כל הנתונים של המשתמשים שהאפליקציה אוספת מוצפנים במהלך ההעברה שלהם מחוץ למכשיר? (PSL_DATA_COLLECTION_ENCRYPTED_IN_TRANSIT)
+     * תשובה: כן (הנתונים מועברים בתקשורת HTTPS מאובטחת ל-Gemini API).
+
+2. ניהול חשבונות (Account Management):
+   - באילו מהשיטות הבאות ליצירת חשבונות האפליקציה שלך תומכת? (PSL_SUPPORTED_ACCOUNT_CREATION_METHODS)
+     * תשובה: PSL_ACM_NONE (האפליקציה שלי לא מאפשרת למשתמשים ליצור חשבון).
+
+3. מחיקת נתונים:
+   - האם למשתמשים יש אפשרות לבקש שהנתונים שלהם יימחקו? (PSL_SUPPORT_DATA_DELETION_BY_USER)
+     * תשובה: DATA_DELETION_YES (כן).
+   - כתובת URL למחיקת הנתונים (PSL_DATA_DELETION_URL):
+     * תשובה: האפליקציה מנהלת נתונים באופן מקומי בלבד. ניתן למחוק את כל הנתונים על ידי מחיקת הקבצים המקומיים באפליקציה או הסרתה. לבקשות מיוחדות ניתן לפנות ל: support@voicecloner.aistudio.com
+
+4. סוגי נתונים שצריך להצהיר עליהם (Data Types & Usage):
+
+   - קובצי אודיו / הקלטת אודיו (PSL_DATA_TYPES_AUDIO -> PSL_AUDIO):
+     * נאספים? כן.
+     * שימוש בנתונים (PSL_DATA_USAGE_RESPONSES:PSL_AUDIO):
+       - האם נאספים/משותפים? נאספים בלבד (PSL_DATA_USAGE_ONLY_COLLECTED).
+       - מעובדים באופן זמני (Ephemerally)? כן.
+       - בחירת משתמשים (User Control)? איסוף הנתונים נדרש (DATA_USAGE_USER_CONTROL_REQUIRED).
+       - למה נאספים? תכונות האפליקציה (PSL_APP_FUNCTIONALITY).
+
+   - מידע על האפליקציה וביצועי האפליקציה / יומני קריסה (PSL_DATA_TYPES_APP_PERFORMANCE -> PSL_CRASH_LOGS):
+     * נאספים? כן.
+     * שימוש בנתונים (PSL_DATA_USAGE_RESPONSES:PSL_CRASH_LOGS):
+       - האם נאספים/משותפים? נאספים בלבד (PSL_DATA_USAGE_ONLY_COLLECTED).
+       - מעובדים באופן זמני (Ephemerally)? לא.
+       - בחירת משתמשים (User Control)? המשתמשים יכולים לבחור (PSL_DATA_USAGE_USER_CONTROL_OPTIONAL).
+       - למה נאספים? Analytics (PSL_ANALYTICS).
+
+   - מזהה המכשיר או מזהים אחרים (PSL_DATA_TYPES_IDENTIFIERS -> PSL_DEVICE_ID):
+     * נאספים? כן.
+     * שימוש בנתונים (PSL_DATA_USAGE_RESPONSES:PSL_DEVICE_ID):
+       - האם נאספים/משותפים? נאספים בלבד (PSL_DATA_USAGE_ONLY_COLLECTED).
+       - מעובדים באופן זמני (Ephemerally)? לא.
+       - בחירת משתמשים (User Control)? המשתמשים יכולים לבחור (PSL_DATA_USAGE_USER_CONTROL_OPTIONAL).
+       - למה נאספים? Analytics (PSL_ANALYTICS).

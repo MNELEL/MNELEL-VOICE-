@@ -14,8 +14,8 @@ android {
     applicationId = "com.aistudio.voicecloner.abcvdx"
     minSdk = 24
     targetSdk = 36
-    versionCode = 4
-    versionName = "1.0.1"
+    versionCode = 5
+    versionName = "1.0.2"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -119,3 +119,70 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
 }
+
+tasks.register("incrementVersion") {
+    notCompatibleWithConfigurationCache("Modify build.gradle.kts file directly")
+    doLast {
+        val gradleFile = file("build.gradle.kts")
+        if (gradleFile.exists()) {
+            var content = gradleFile.readText()
+            
+            // Find versionCode
+            val versionCodeRegex = """versionCode\s*=\s*(\d+)""".toRegex()
+            val matchVC = versionCodeRegex.find(content)
+            if (matchVC != null) {
+                val currentVC = matchVC.groupValues[1].toInt()
+                val nextVC = currentVC + 1
+                content = content.replaceFirst("versionCode = $currentVC", "versionCode = $nextVC")
+                println("SUCCESS: Incremented versionCode from $currentVC to $nextVC")
+            } else {
+                println("ERROR: Could not find versionCode in build.gradle.kts")
+            }
+            
+            // Find versionName
+            val versionNameRegex = """versionName\s*=\s*"([^"]+)"""".toRegex()
+            val matchVN = versionNameRegex.find(content)
+            if (matchVN != null) {
+                val currentVN = matchVN.groupValues[1]
+                val parts = currentVN.split(".")
+                if (parts.size >= 3) {
+                    val patch = parts[2].toIntOrNull() ?: 0
+                    val nextVN = "${parts[0]}.${parts[1]}.${patch + 1}"
+                    content = content.replaceFirst("""versionName = "$currentVN"""", """versionName = "$nextVN"""")
+                    println("SUCCESS: Incremented versionName from $currentVN to $nextVN")
+                } else if (parts.size == 2) {
+                    val minor = parts[1].toIntOrNull() ?: 0
+                    val nextVN = "${parts[0]}.${minor + 1}"
+                    content = content.replaceFirst("""versionName = "$currentVN"""", """versionName = "$nextVN"""")
+                    println("SUCCESS: Incremented versionName from $currentVN to $nextVN")
+                } else {
+                    val nextVN = "$currentVN.1"
+                    content = content.replaceFirst("""versionName = "$currentVN"""", """versionName = "$nextVN"""")
+                    println("SUCCESS: Setup versionName from $currentVN to $nextVN")
+                }
+            } else {
+                println("ERROR: Could not find versionName in build.gradle.kts")
+            }
+            
+            // Ensure applicationId is set correct
+            val appIDRegex = """applicationId\s*=\s*"([^"]+)"""".toRegex()
+            val matchID = appIDRegex.find(content)
+            if (matchID != null) {
+                val currentID = matchID.groupValues[1]
+                if (currentID != "com.aistudio.voicecloner.abcvdx") {
+                    content = content.replaceFirst("""applicationId = "$currentID"""", """applicationId = "com.aistudio.voicecloner.abcvdx"""")
+                    println("SUCCESS: Enforced applicationId to com.aistudio.voicecloner.abcvdx (was $currentID)")
+                } else {
+                    println("SUCCESS: applicationId was already verified correct: $currentID")
+                }
+            } else {
+                println("WARNING: Could not find applicationId line to verify")
+            }
+            
+            gradleFile.writeText(content)
+        } else {
+            println("ERROR: build.gradle.kts file not found under ${gradleFile.absolutePath}")
+        }
+    }
+}
+

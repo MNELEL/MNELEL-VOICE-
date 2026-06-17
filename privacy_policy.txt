@@ -1,0 +1,26 @@
+Privacy Policy for VoiceCloner AI
+
+Effective Date: June 17, 2026
+
+1. Introduction
+Welcome to VoiceCloner AI. This Privacy Policy explains how we collect, use, and protect your information when you use our mobile application ("App"). We take your privacy seriously and ensure transparency in how we handle your data.
+
+2. Data Collection and Usage
+- Audio Recording (Microphone): Our App requires microphone access to record your voice. These recordings are used exclusively within the App to analyze phonetic parameters, pitch, and create a voice profile for Text-to-Speech (TTS) conversion.
+- Local Processing and Storage: The audio recordings and generated voice signatures (JSON) are processed safely and stored locally on your device. We do not upload, store, or share your raw audio files on external servers without your explicit action.
+- Gemini API Integration: To analyze voice parameters and synthesize speech, the App may send necessary telemetry and data to Google's Gemini API. This data is handled securely and in accordance with Google's API Terms of Service.
+
+3. Data Sharing and Disclosure
+We do not sell, trade, or otherwise transfer your personal information or audio recordings to third parties. All processing is done to provide the core functionality of the App.
+
+4. Children's Privacy
+Our App does not intentionally target children under the age of 13. We do not knowingly collect personal information from children under 13. If you believe we have inadvertently collected such data, please contact us so we can delete it.
+
+5. Security
+We implement standard security measures to protect your data. Since your voice profiles are stored locally on your device, their security also depends on your device's security settings (e.g., screen lock, encryption).
+
+6. Changes to This Privacy Policy
+We may update our Privacy Policy from time to time. Any changes will be updated on this page with a revised "Effective Date."
+
+7. Contact Us
+If you have any questions or suggestions regarding our Privacy Policy, please contact us at: support@voicecloner.aistudio.com.

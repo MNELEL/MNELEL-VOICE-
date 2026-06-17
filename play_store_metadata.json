@@ -1,0 +1,36 @@
+{
+  "applicationId": "com.aistudio.voicecloner.abcvdx",
+  "app_name_hebrew": "משבט קול AI",
+  "app_name_english": "VoiceCloner AI",
+  "developer_email": "support@voicecloner.aistudio.com",
+  "privacy_policy_url": "https://aistudio.voicecloner.com/privacy",
+  "classification": {
+    "category": "AUDIO_AND_VIDEO",
+    "sub_category": "Voice synthesis & cloning",
+    "content_rating": "PEGI 3 / Everyone",
+    "target_audience": ["13-15", "16-17", "18+"]
+  },
+  "metadata_he": {
+    "title": "משבט קול AI",
+    "short_description": "שכפול, ניתוח ועריכת קולות באמצעות Gemini AI בקלות ובמהירות",
+    "full_description": "אפליקציית משבט קול AI לוקחת את טכנולוגיית שכפול וניתוח הקול לרמה הבאה. בעזרת תהליך פשוט וקצר של הקלטה או העלאת קול (מעל 5 שניות), האפליקציה מנתחת פרמטרים פונטיים, תדרים, דיוק, ורמת רעש יחסיים המאובטחים במלואם. לאחר מכן, ניתן לייצר דיבור מטקסט (TTS) בקול המצולם עצמו. נתונים אלה נשמרים במכשיר המקומי וניתנים לייצוא כחתימת קול בפורמט JSON מאובטח לשימוש חוזר בכל עת."
+  },
+  "metadata_en": {
+    "title": "VoiceCloner AI",
+    "short_description": "Clone, analyze and synthesize voices securely with Gemini AI",
+    "full_description": "VoiceCloner AI takes voice cloning and speech analysis to the next level. Record or upload a short voice sample (5+ seconds), and let the app analyze phonetic parameters, pitch frequencies, accuracy levels, and relative background noise under fully secured and local storage conditions. Easily generate custom Text-to-Speech (TTS) voice clips in the scanned voice. All voice profiles can be exported as secured JSON voice signatures for easy backup and restoration."
+  },
+  "assets": {
+    "app_icon": "res/mipmap-xxxhdpi/ic_launcher.png",
+    "feature_graphic": "https://aistudio.voicecloner.com/assets/feature_graphic.png",
+    "screenshots": [
+      "https://aistudio.voicecloner.com/assets/screenshot_home.png",
+      "https://aistudio.voicecloner.com/assets/screenshot_voice_clone.png",
+      "https://aistudio.voicecloner.com/assets/screenshot_audio_player.png"
+    ]
+  },
+  "versioning": {
+    "current_version_code": 4,
+    "current_version_name": "1.0.1"
+  }
+}

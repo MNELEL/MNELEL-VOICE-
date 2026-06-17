@@ -1817,8 +1817,12 @@ fun VoiceDashboardSection(profile: VoiceProfile) {
                 )
             }
             
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             
+            com.example.ui.ClarityScoreVisualMeter(noiseLevel = profile.distortionLevel)
+            
+            Spacer(modifier = Modifier.height(16.dp))
+
             Column(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -1826,7 +1830,6 @@ fun VoiceDashboardSection(profile: VoiceProfile) {
                 MetricBarItem(label = "צורת הגייה ודיוק פונטי (Pronunciation/הגייה)", value = profile.pronunciationClarity, color = MaterialTheme.colorScheme.secondary)
                 MetricBarItem(label = "אינטונציה ומנגינת דיבור (Intonation/התנגנות)", value = profile.intonationScore, color = MaterialTheme.colorScheme.tertiary)
                 MetricBarItem(label = "סדירות נשימה והפסקות דיבור (Breathing/נשימה)", value = profile.breathPauseScore, color = Color(0xFF66BB6A))
-                MetricBarItem(label = "מדד רעש רקע ועיוותי שפה (Noise/عيوותים)", value = profile.distortionLevel, inverted = true, color = MaterialTheme.colorScheme.error)
             }
 
             Spacer(modifier = Modifier.height(16.dp))
