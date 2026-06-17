@@ -153,6 +153,22 @@ class AudioHelper(private val context: Context) {
         }
     }
 
+    fun setPlaybackSpeed(speed: Float) {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                mediaPlayer?.apply {
+                    val wasPlaying = isPlaying
+                    playbackParams = playbackParams.setSpeed(speed)
+                    if (!wasPlaying) {
+                        pause() // setting speed can auto start in some versions, so ensure paused status if not originally playing
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("AudioHelper", "Failed to set playback speed: $speed", e)
+        }
+    }
+
     // --- Base64 & Persistence Helpers ---
 
     fun saveFileToPersistentStorage(file: File, prefix: String): File? {

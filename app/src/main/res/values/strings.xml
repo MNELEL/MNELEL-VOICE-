@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">משבט קול</string>
+    <!-- Google Play Store metadata and resource classification -->
+    <string name="play_store_short_description">שכפול, ניתוח ועריכת קולות באמצעות Gemini AI בקלות ובמהירות</string>
+    <string name="play_store_full_description">אפליקציית משבט קול AI לוקחת את טכנולוגיית שכפול וניתוח הקול לרמה הבאה. בעזרת תהליך פשוט וקצר של הקלטה או העלאת קול (מעל 5 שניות), האפליקציה מנתחת פרמטרים פונטיים, תדרים, דיוק, ורמת רעש רולטיביים המאובטחים במלואם. לאחר מכן, ניתן לייצר דיבור טקסט לדיבור (TTS) בקול המצולם עצמו. נתונים אלה נשמרים במכשיר המקומי וניתנים לייצוא כחתימת קול בפורמט JSON מאובטח לשימוש חוזר בכל עת.</string>
+    <string name="play_store_developer_email">support@voicecloner.aistudio.com</string>
+    <string name="play_store_category">Audio / Synthesis Tools</string>
+    <string name="play_store_content_rating">Everyone (PEGI 3)</string>
+    <string name="play_store_privacy_policy">https://aistudio.voicecloner.com/privacy</string>
 </resources>
