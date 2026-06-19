@@ -96,19 +96,26 @@ class AudioHelper(private val context: Context) {
 
     // --- Playback ---
 
-    fun playAudio(file: File, onCompletion: () -> Unit) {
+    fun playAudio(file: File, playbackSpeed: Float = 1.0f, onCompletion: () -> Unit) {
         try {
             stopPlayback()
             mediaPlayer = MediaPlayer().apply {
                 setDataSource(file.absolutePath)
                 prepare()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && playbackSpeed != 1.0f) {
+                    try {
+                        playbackParams = playbackParams.setSpeed(playbackSpeed)
+                    } catch (e: Exception) {
+                        Log.e("AudioHelper", "Failed to set playback speed", e)
+                    }
+                }
                 start()
                 setOnCompletionListener {
                     onCompletion()
                     stopPlayback()
                 }
             }
-            Log.d("AudioHelper", "Playing: ${file.absolutePath}")
+            Log.d("AudioHelper", "Playing: ${file.absolutePath} at ${playbackSpeed}x")
         } catch (e: Exception) {
             Log.e("AudioHelper", "Failed to play audio file", e)
             onCompletion()

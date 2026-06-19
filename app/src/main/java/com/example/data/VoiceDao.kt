@@ -31,4 +31,9 @@ interface VoiceDao {
 
     @Query("DELETE FROM voice_generation_results WHERE profileId = :profileId")
     suspend fun deleteResultsByProfileId(profileId: Int)
+    @Query("DELETE FROM voice_profiles")
+    suspend fun deleteAllProfiles()
+
+    @Query("DELETE FROM voice_generation_results")
+    suspend fun deleteAllGenerationResults()
 }

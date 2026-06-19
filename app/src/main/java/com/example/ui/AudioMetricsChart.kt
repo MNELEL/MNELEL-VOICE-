@@ -45,13 +45,13 @@ fun AudioMetricsChart(
         ) {
             Text(
                 text = "דיאגרמת תדרים וסטיית גובה קול (Pitch Contour)",
-                fontSize = 12.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF162544)
             )
             Text(
                 text = "${profile.frequencyHz} Hz ממוצע",
-                fontSize = 11.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -201,7 +201,7 @@ fun LegendItem(label: String, color: Color) {
         )
         Text(
             text = label,
-            fontSize = 9.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             color = Color(0xFF475569)
         )

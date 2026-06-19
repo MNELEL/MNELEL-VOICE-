@@ -56,7 +56,7 @@ fun ClarityScoreVisualMeter(noiseLevel: Int, modifier: Modifier = Modifier) {
     ) {
         Text(
             text = "מדד צלילות (מבוסס רעשי רקע)",
-            fontSize = 12.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             modifier = Modifier.padding(bottom = 8.dp)

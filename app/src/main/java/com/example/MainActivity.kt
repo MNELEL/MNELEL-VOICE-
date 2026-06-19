@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.VoiceProfile
+import com.example.ui.AudioRecordingInterface
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.BrandNavy
 import com.example.ui.theme.LightBg
@@ -154,10 +155,10 @@ fun VoiceClonerAppScreen(
     var expandedSynthProfileId by remember { mutableStateOf<Int?>(null) }
     var synthText by remember { mutableStateOf("") }
 
-    val hasApiKey = remember {
-        val key = BuildConfig.GEMINI_API_KEY
-        key.isNotEmpty() && key != "MY_GEMINI_API_KEY"
-    }
+    val hasApiKey by viewModel.isApiKeyAvailable.collectAsStateWithLifecycle()
+    val customApiKey by viewModel.customApiKey.collectAsStateWithLifecycle()
+    var showApiKeyDialog by remember { mutableStateOf(false) }
+    var showSettingsPage by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -173,7 +174,9 @@ fun VoiceClonerAppScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -181,31 +184,46 @@ fun VoiceClonerAppScreen(
                     Text(
                         text = "משבט קול AI",
                         style = MaterialTheme.typography.titleLarge.copy(
-                            fontSize = 24.sp,
+                            fontSize = 22.sp,
                             fontWeight = FontWeight.Black,
                             color = MaterialTheme.colorScheme.primary
                         )
                     )
                     IconButton(
                         onClick = { showInfoModal = true },
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Info,
                             contentDescription = "הנחיות שימוש ומדיניות",
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = { showSettingsPage = true },
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "הגדרות",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }
                 Text(
                     text = "עריכה, ניתוח ושיבוט קולות באמצעות Gemini",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
             }
 
-            // Connection Badge
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Clickable Connection Badge
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(12.dp))
@@ -217,7 +235,8 @@ fun VoiceClonerAppScreen(
                         color = if (hasApiKey) Color(0xFF4CAF50) else Color(0xFFFF9800),
                         shape = RoundedCornerShape(12.dp)
                     )
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                    .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp).clickable { showApiKeyDialog = true }
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Row(
@@ -231,13 +250,96 @@ fun VoiceClonerAppScreen(
                             .background(if (hasApiKey) Color(0xFF4CAF50) else Color(0xFFFF9800))
                     )
                     Text(
-                        text = if (hasApiKey) "מפתח מחובר" else "מפתח חסר .env",
-                        fontSize = 11.sp,
+                        text = if (hasApiKey) "מפתח מחובר" else "הגדר מפתח API",
+                        fontSize = 14.sp,
                         color = if (hasApiKey) Color(0xFF2E7D32) else Color(0xFFD84315),
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }
+        }
+
+        // Api Key configuration dialog
+        if (showApiKeyDialog) {
+            var tempKey by remember { mutableStateOf(customApiKey) }
+            AlertDialog(
+                onDismissRequest = { showApiKeyDialog = false },
+                title = {
+                    Text(
+                        text = "הגדרת מפתח Gemini API",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                },
+                text = {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "לצורך ניתוח דיבור ושיבוט קולות, האפליקציה משתמשת בשירותי הבינה המלאכותית של Gemini. באפשרותך להגדיר מפתח אישי במידה ומפתח ברירת המחדל חסר או שאינו תקין (פתרון לשגיאה 103/403).",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        )
+                        
+                        OutlinedTextField(
+                            value = tempKey,
+                            onValueChange = { tempKey = it },
+                            label = { Text("מפתח Gemini API של גוגל", fontSize = 14.sp) },
+                            placeholder = { Text("הכנס מפתח AI לכאן...", fontSize = 14.sp) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        
+                        val builtinKeyExists = BuildConfig.GEMINI_API_KEY.isNotEmpty() && BuildConfig.GEMINI_API_KEY != "MY_GEMINI_API_KEY"
+                        if (builtinKeyExists) {
+                            Text(
+                                text = "* קיים מפתח ברירת מחדל מובנה בשרת / קובץ .env",
+                                fontSize = 14.sp,
+                                color = Color(0xFF2E7D32),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.saveCustomApiKey(tempKey)
+                            showApiKeyDialog = false
+                            android.widget.Toast.makeText(context, "מפתח ה-API עודכן בהצלחה", android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("שמור מפתח")
+                    }
+                },
+                dismissButton = {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (customApiKey.isNotEmpty()) {
+                            TextButton(
+                                onClick = {
+                                    viewModel.saveCustomApiKey("")
+                                    tempKey = ""
+                                    showApiKeyDialog = false
+                                    android.widget.Toast.makeText(context, "מפתח אישי נמחק, חוזר לברירת מחדל", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            ) {
+                                Text("אפס לברירת מחדל", color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                        TextButton(onClick = { showApiKeyDialog = false }) {
+                            Text("ביטול")
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(16.dp)
+            )
         }
 
         Box(
@@ -315,14 +417,20 @@ fun VoiceClonerAppScreen(
                                 Spacer(modifier = Modifier.height(12.dp))
 
                                 if (micPermissionState.status.isGranted) {
-                                    SoundWaveVisualizer(
+                                    AudioRecordingInterface(
                                         isRecording = isRecording,
                                         isPaused = isRecordingPaused,
-                                        amplitude = liveAmplitude
+                                        durationSec = recordingDurationSec,
+                                        amplitude = liveAmplitude,
+                                        onStart = { viewModel.startRecordVoice() },
+                                        onPause = { viewModel.pauseRecordVoice() },
+                                        onResume = { viewModel.resumeRecordVoice() },
+                                        onStop = { viewModel.stopRecordVoice() }
                                     )
                                     Spacer(modifier = Modifier.height(16.dp))
 
                                     if (isRecording) {
+                                        if (false) {
                                         // Display formatted recording duration and pause/resume triggers
                                         val minutes = recordingDurationSec / 60
                                         val seconds = recordingDurationSec % 60
@@ -348,7 +456,22 @@ fun VoiceClonerAppScreen(
                                             trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
                                         )
 
+                                        Spacer(modifier = Modifier.height(6.dp))
+
+                                        Text(
+                                            text = if (recordingDurationSec < 5) {
+                                                "נדרש להקליט לפחות 5 שניות (עוד ${5 - recordingDurationSec} שניות נותרו) 🎙️"
+                                            } else {
+                                                "משך ההקלטה תקין להתחלת שיבוט! מומלץ להמשיך ל-15 שניות ✨"
+                                            },
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (recordingDurationSec < 5) MaterialTheme.colorScheme.error else Color(0xFF10B981),
+                                            modifier = Modifier.padding(top = 2.dp)
+                                        )
+
                                         Spacer(modifier = Modifier.height(12.dp))
+                                        }
 
                                         Card(
                                             shape = RoundedCornerShape(12.dp),
@@ -370,7 +493,7 @@ fun VoiceClonerAppScreen(
                                                 Text(
                                                     text = "📊 מדדי איכות ההקלטה בזמן אמת",
                                                     fontWeight = FontWeight.Bold,
-                                                    fontSize = 13.sp,
+                                                    fontSize = 14.sp,
                                                     color = MaterialTheme.colorScheme.primary,
                                                     modifier = Modifier.align(Alignment.CenterHorizontally)
                                                 )
@@ -380,7 +503,7 @@ fun VoiceClonerAppScreen(
                                                     horizontalArrangement = Arrangement.SpaceEvenly
                                                 ) {
                                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                        Text("צלילות השמע", fontSize = 11.sp, color = Color.Gray)
+                                                        Text("צלילות השמע", fontSize = 14.sp, color = Color.Gray)
                                                         Text(
                                                             text = "$clarityScore%",
                                                             fontSize = 16.sp,
@@ -401,7 +524,7 @@ fun VoiceClonerAppScreen(
                                                     )
 
                                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                        Text("ציון שיבוט כולל", fontSize = 11.sp, color = Color.Gray)
+                                                        Text("ציון שיבוט כולל", fontSize = 14.sp, color = Color.Gray)
                                                         Text(
                                                             text = "$overallQualityScore%",
                                                             fontSize = 16.sp,
@@ -417,7 +540,7 @@ fun VoiceClonerAppScreen(
 
                                                 Text(
                                                     text = qualityFeedback,
-                                                    fontSize = 11.sp,
+                                                    fontSize = 14.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     textAlign = TextAlign.Center,
                                                     color = when {
@@ -430,6 +553,7 @@ fun VoiceClonerAppScreen(
                                             }
                                         }
 
+                                        if (false) {
                                         Spacer(modifier = Modifier.height(12.dp))
 
                                         Row(
@@ -470,31 +594,48 @@ fun VoiceClonerAppScreen(
                                             }
 
                                             // Stop & save recording trigger
+                                            val isDurationSufficient = recordingDurationSec >= 5
                                             IconButton(
                                                 onClick = {
-                                                    viewModel.stopRecordVoice()
+                                                    if (isDurationSufficient) {
+                                                        viewModel.stopRecordVoice()
+                                                    }
                                                 },
+                                                enabled = isDurationSufficient,
                                                 modifier = Modifier
                                                     .size(72.dp)
                                                     .clip(CircleShape)
-                                                    .background(MaterialTheme.colorScheme.secondary)
+                                                    .background(
+                                                        if (isDurationSufficient) MaterialTheme.colorScheme.secondary
+                                                        else Color.Gray.copy(alpha = 0.4f)
+                                                    )
                                             ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Check,
-                                                    contentDescription = "סיום ושמירה",
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(36.dp)
-                                                )
+                                                if (isDurationSufficient) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = "סיום ושמירה",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(36.dp)
+                                                    )
+                                                } else {
+                                                    Text(
+                                                        text = "${5 - recordingDurationSec}",
+                                                        color = Color.White,
+                                                        fontSize = 22.sp,
+                                                        fontWeight = FontWeight.Black
+                                                     )
+                                                }
                                             }
                                         }
 
                                         Spacer(modifier = Modifier.height(8.dp))
                                         Text(
                                             text = if (isRecordingPaused) "ההקלטה מושהית" else "הקלטה קולית פעילה...",
-                                            fontSize = 12.sp,
+                                            fontSize = 14.sp,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                         )
-                                    } else {
+                                        }
+                                    } else if (false) {
                                         IconButton(
                                             onClick = {
                                                 viewModel.startRecordVoice()
@@ -516,7 +657,7 @@ fun VoiceClonerAppScreen(
                                         Spacer(modifier = Modifier.height(8.dp))
                                         Text(
                                             text = "לחץ להתחלת הקלטת קול",
-                                            fontSize = 12.sp,
+                                            fontSize = 14.sp,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                         )
                                     }
@@ -552,7 +693,7 @@ fun VoiceClonerAppScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(vertical = 8.dp)
-                                        .clickable { filePickerLauncher.launch("audio/*") },
+                                        .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp).clickable { filePickerLauncher.launch("audio/*") },
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.3f)),
                                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
                                     shape = RoundedCornerShape(16.dp)
@@ -579,7 +720,7 @@ fun VoiceClonerAppScreen(
                                         )
                                         Text(
                                             text = "תומך בפורמטים MP3, AAC, WAV ועוד",
-                                            fontSize = 11.sp,
+                                            fontSize = 14.sp,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                                         )
                                     }
@@ -686,13 +827,13 @@ fun VoiceClonerAppScreen(
                                                 ) {
                                                     Text(
                                                         text = if (isPlayingRecorded) "מנגן דגימת קול..." else "שמע דגימת שנטענה",
-                                                        fontSize = 12.sp,
+                                                        fontSize = 14.sp,
                                                         fontWeight = FontWeight.Bold,
                                                         color = MaterialTheme.colorScheme.primary
                                                     )
                                                     Text(
                                                         text = if (isPlayingRecorded) "$playbackElapsedText / $playbackDurationText" else "00:00",
-                                                        fontSize = 11.sp,
+                                                        fontSize = 14.sp,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                                     )
                                                 }
@@ -846,7 +987,7 @@ fun VoiceClonerAppScreen(
                                         
                                         Text(
                                             text = stepText[currentStepIdx],
-                                            fontSize = 12.sp,
+                                            fontSize = 14.sp,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                                             textAlign = TextAlign.Center
                                         )
@@ -867,7 +1008,7 @@ fun VoiceClonerAppScreen(
                                     Text(
                                         text = err,
                                         color = MaterialTheme.colorScheme.error,
-                                        fontSize = 13.sp,
+                                        fontSize = 14.sp,
                                         fontWeight = FontWeight.Medium
                                     )
                                 }
@@ -904,7 +1045,7 @@ fun VoiceClonerAppScreen(
                         ) {
                             Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("ייבא חתימת קול 📥", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("ייבא חתימת קול 📥", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -946,7 +1087,7 @@ fun VoiceClonerAppScreen(
                             
                             Text(
                                 text = "שמור את כל פרופילי הקול והחתימות המשובטות בקובץ דחוס יחיד לצורך מעבר למכשיר אחר או שחזור מהיר.",
-                                fontSize = 11.sp,
+                                fontSize = 14.sp,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                                 lineHeight = 16.sp
                             )
@@ -976,7 +1117,7 @@ fun VoiceClonerAppScreen(
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("ייצוא גיבוי קבוצתי", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text("ייצוא גיבוי קבוצתי", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                                 }
                                 
                                 OutlinedButton(
@@ -997,7 +1138,7 @@ fun VoiceClonerAppScreen(
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("ייבוא גיבוי קבוצתי", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text("ייבוא גיבוי קבוצתי", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -1033,7 +1174,7 @@ fun VoiceClonerAppScreen(
                                 )
                                 Text(
                                     text = "הקלט דגימת קול מעלה ולחץ על שבט קול כדי לבצע ניתוח ושיבוט בבינה מלאכותית.",
-                                    fontSize = 12.sp,
+                                    fontSize = 14.sp,
                                     textAlign = TextAlign.Center,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                                     modifier = Modifier.padding(top = 4.dp)
@@ -1061,11 +1202,11 @@ fun VoiceClonerAppScreen(
                                     synthText = ""
                                 }
                             },
-                            onSynthesize = { text ->
-                                viewModel.synthesizeText(text, profile)
+                            onSynthesize = { text, pitchTuning, speedTuning, vibe ->
+                                viewModel.synthesizeText(text, profile, pitchTuning, speedTuning, vibe)
                             },
-                            onLocalSynthesize = { text ->
-                                viewModel.synthesizeTextLocal(text, profile)
+                            onLocalSynthesize = { text, pitchTuning, speedTuning ->
+                                viewModel.synthesizeTextLocal(text, profile, pitchTuning, speedTuning)
                             },
                             onExportClick = {
                                 val json = viewModel.exportProfileToJson(profile)
@@ -1101,7 +1242,7 @@ fun VoiceClonerAppScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             text = "הדבק את קוד החתימה בפורמט JSON שיוצא בעבר:",
-                            fontSize = 12.sp,
+                            fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                         )
                         OutlinedTextField(
@@ -1147,6 +1288,13 @@ fun VoiceClonerAppScreen(
             )
         }
 
+        if (showSettingsPage) {
+            SettingsDialog(
+                viewModel = viewModel,
+                onDismiss = { showSettingsPage = false }
+            )
+        }
+
         if (showInfoModal) {
             AlertDialog(
                 onDismissRequest = { showInfoModal = false },
@@ -1188,7 +1336,7 @@ fun VoiceClonerAppScreen(
                                 Text(
                                     text = "💡 הנחיות שימוש להקלטה איכותית",
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
+                                    fontSize = 14.sp,
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -1196,7 +1344,7 @@ fun VoiceClonerAppScreen(
                                     text = "• הקלט בסביבה שקטה, ללא רעשי רקע של מאווררים, מזגנים או אנשים נוספים.\n" +
                                            "• דבר בטון דיבור טבעי ובקצב קבוע ורגוע.\n" +
                                            "• שמור על מרחק אחיד של כ-15-20 ס\"מ מהמיקרופון של המכשיר.",
-                                    fontSize = 11.sp,
+                                    fontSize = 14.sp,
                                     lineHeight = 16.sp,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -1215,7 +1363,7 @@ fun VoiceClonerAppScreen(
                                 Text(
                                     text = "⏱️ דרישות משך הקלטה",
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
+                                    fontSize = 14.sp,
                                     color = MaterialTheme.colorScheme.secondary
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -1223,7 +1371,7 @@ fun VoiceClonerAppScreen(
                                     text = "• מינימום מוחלט: 5 שניות. כל הקלטה קצרה מזאת תידחה על ידי מנוע העיבוד.\n" +
                                            "• מומלץ ביותר: 15-30 שניות. נפח קול זה מאפשר ניתוח תדרים, סטרקטורה פונטית ואינטונציה ברמה גבוהה.\n" +
                                            "• מקסימום: עד 3 דקות של דיבור רצוף.",
-                                    fontSize = 11.sp,
+                                    fontSize = 14.sp,
                                     lineHeight = 16.sp,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -1242,7 +1390,7 @@ fun VoiceClonerAppScreen(
                                 Text(
                                     text = "🛡️ הגנת פרטיות והסכמה",
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
+                                    fontSize = 14.sp,
                                     color = Color(0xFF2E7D32)
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -1250,7 +1398,7 @@ fun VoiceClonerAppScreen(
                                     text = "• כל נתוני הקול והניתוח מעובדים ומאובטחים בהתאם למדיניות אנונימית.\n" +
                                            "• חתימות הקול נשמרות בהתקן המקומי בלבד ואינן מועברות לגורמי צד שלישי כלשהם.\n" +
                                            "• חל איסור מוחלט לשכפל או לעשות שימוש בקולו של אדם אחר ללא הסכמתו המפורשת והחוקית.",
-                                    fontSize = 11.sp,
+                                    fontSize = 14.sp,
                                     lineHeight = 16.sp,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -1283,8 +1431,8 @@ fun VoiceProfileCard(
     onPlaySample: () -> Unit,
     onStopSample: () -> Unit,
     onToggleExpand: () -> Unit,
-    onSynthesize: (String) -> Unit,
-    onLocalSynthesize: (String) -> Unit,
+    onSynthesize: (String, Float, Float, String) -> Unit,
+    onLocalSynthesize: (String, Float, Float) -> Unit,
     onExportClick: () -> Unit,
     onDelete: () -> Unit,
     recentGenerations: List<com.example.data.VoiceGenerationResult>,
@@ -1294,6 +1442,9 @@ fun VoiceProfileCard(
     onDeleteResult: (com.example.data.VoiceGenerationResult) -> Unit
 ) {
     val context = LocalContext.current
+    var userPitchTuning by remember { mutableStateOf(0f) }
+    var userSpeedTuning by remember { mutableStateOf(0f) }
+    var selectedVibeModifier by remember { mutableStateOf("מקורי") }
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1336,7 +1487,7 @@ fun VoiceProfileCard(
                         )
                         Text(
                             text = "מגדר: ${profile.gender} | דמיון קולי: ${profile.geminiVoiceName}",
-                            fontSize = 11.sp,
+                            fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                         )
                     }
@@ -1415,7 +1566,7 @@ fun VoiceProfileCard(
                     Text(
                         text = if (isPlaying) "עצור דגימה" else "נגן דגימה מקורית",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
+                        fontSize = 14.sp
                     )
                 }
 
@@ -1439,7 +1590,7 @@ fun VoiceProfileCard(
                     Text(
                         text = "דיבור דיגיטלי ב-AI",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
+                        fontSize = 14.sp
                     )
                 }
             }
@@ -1461,7 +1612,7 @@ fun VoiceProfileCard(
                     Text(
                         text = "ייצור דיבור מטקסט בעזרת פרופיל הקול:",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
+                        fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.primary
                     )
 
@@ -1478,6 +1629,130 @@ fun VoiceProfileCard(
                         shape = RoundedCornerShape(12.dp)
                     )
 
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Dynamic calibration card for 1:1 voice match tuning
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.08f)
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "לוח כיול קול דינמי (לחפיפת 1:1 בדיוק)",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            
+                            Spacer(modifier = Modifier.height(10.dp))
+                            
+                            // Pitch tuning slider
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "גובה צליל: ${if (userPitchTuning > 0) "+" else ""}${userPitchTuning.toInt()}%",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = if (userPitchTuning == 0f) "ברירת מחדל" else if (userPitchTuning > 0) "דק / סופרן" else "עמוק / בס",
+                                    fontSize = 14.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
+                            Slider(
+                                value = userPitchTuning,
+                                onValueChange = { userPitchTuning = it },
+                                valueRange = -50f..50f,
+                                modifier = Modifier.height(24.dp)
+                            )
+                            
+                            Spacer(modifier = Modifier.height(10.dp))
+                            
+                            // Speed tuning slider
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "מהירות דיבור: ${if (userSpeedTuning > 0) "+" else ""}${userSpeedTuning.toInt()}%",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = if (userSpeedTuning == 0f) "ברירת מחדל" else if (userSpeedTuning > 0) "מהיר" else "מדוד / איטי",
+                                    fontSize = 14.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
+                            Slider(
+                                value = userSpeedTuning,
+                                onValueChange = { userSpeedTuning = it },
+                                valueRange = -50f..50f,
+                                modifier = Modifier.height(24.dp)
+                            )
+                            
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            // Vibe Modifier chips selection
+                            Text(
+                                text = "גוון הבעה וסגנון רגשי קולי:",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(bottom = 6.dp)
+                            )
+                            val vibes = listOf("מקורי", "סמכותי", "רגוע", "נמרץ", "דרמטי")
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                vibes.forEach { vibe ->
+                                    val isSelected = selectedVibeModifier == vibe
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(
+                                                if (isSelected) MaterialTheme.colorScheme.primary 
+                                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+                                            )
+                                            .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp).clickable { selectedVibeModifier = vibe }
+                                            .padding(vertical = 6.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = vibe,
+                                            fontSize = 14.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Row(
@@ -1486,7 +1761,7 @@ fun VoiceProfileCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Button(
-                            onClick = { onSynthesize(synthText) },
+                            onClick = { onSynthesize(synthText, userPitchTuning, userSpeedTuning, selectedVibeModifier) },
                             enabled = !isSynthesizing && synthText.isNotEmpty(),
                             modifier = Modifier
                                 .weight(1.1f)
@@ -1500,16 +1775,16 @@ fun VoiceProfileCard(
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("מייצר קול...", fontSize = 11.sp)
+                                Text("מייצר קול...", fontSize = 14.sp)
                             } else {
                                 Icon(imageVector = Icons.Default.Send, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("דיבור AI (שרת)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("דיבור AI (שרת)", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                             }
                         }
 
                         Button(
-                            onClick = { onLocalSynthesize(synthText) },
+                            onClick = { onLocalSynthesize(synthText, userPitchTuning, userSpeedTuning) },
                             enabled = !isSynthesizing && synthText.isNotEmpty(),
                             modifier = Modifier
                                 .weight(1f)
@@ -1521,7 +1796,7 @@ fun VoiceProfileCard(
                         ) {
                             Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("השמע עם TTS", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("השמע עם TTS", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -1531,7 +1806,7 @@ fun VoiceProfileCard(
                         Text(
                             text = "הפקות שמע קודמות מהקול המשובט (${recentGenerations.size}):",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
+                            fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.secondary
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -1573,7 +1848,7 @@ fun VoiceProfileCard(
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = result.inputText,
-                                            fontSize = 12.sp,
+                                            fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
                                             maxLines = 2,
                                             color = MaterialTheme.colorScheme.onSurface
@@ -1581,7 +1856,7 @@ fun VoiceProfileCard(
                                         val formattedDate = android.text.format.DateFormat.format("dd/MM/yyyy HH:mm", result.createdAt)
                                         Text(
                                             text = "נוצר ב: $formattedDate",
-                                            fontSize = 9.sp,
+                                            fontSize = 14.sp,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                                         )
                                     }
@@ -1591,6 +1866,22 @@ fun VoiceProfileCard(
                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    // Quick Regenerate Button
+                                    IconButton(
+                                        onClick = {
+                                            onSynthTextChange(result.inputText)
+                                            if (!isExpanded) onToggleExpand()
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Refresh,
+                                            contentDescription = "הזן לשיבוט מחדש",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+
                                     // Download Button (API 29+ Safe Downloads)
                                     IconButton(
                                         onClick = {
@@ -1652,14 +1943,14 @@ fun RowScope.TraitChip(label: String, value: String, color: Color) {
         ) {
             Text(
                 text = label,
-                fontSize = 10.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = color
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = value,
-                fontSize = 11.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Black,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center
@@ -1768,13 +2059,13 @@ fun VoiceDashboardSection(profile: VoiceProfile) {
             ) {
                 Text(
                     text = "תדר קול ממוצע:",
-                    fontSize = 11.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "${profile.frequencyHz} Hz",
-                    fontSize = 12.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Black,
                     color = MaterialTheme.colorScheme.secondary
                 )
@@ -1791,13 +2082,13 @@ fun VoiceDashboardSection(profile: VoiceProfile) {
             ) {
                 Row(modifier = Modifier.fillMaxSize()) {
                     Box(modifier = Modifier.weight(1f).fillMaxHeight().background(Color(0x111E88E5)), contentAlignment = Alignment.Center) {
-                        Text("בס (נמוך)", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                        Text("בס (נמוך)", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                     }
                     Box(modifier = Modifier.weight(1f).fillMaxHeight().background(Color(0x1143A047)), contentAlignment = Alignment.Center) {
-                        Text("בריטון", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                        Text("בריטון", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                     }
                     Box(modifier = Modifier.weight(1f).fillMaxHeight().background(Color(0x11E53935)), contentAlignment = Alignment.Center) {
-                        Text("סופרן", fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                        Text("סופרן", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                     }
                 }
                 
@@ -1835,6 +2126,10 @@ fun VoiceDashboardSection(profile: VoiceProfile) {
             Spacer(modifier = Modifier.height(16.dp))
 
             com.example.ui.AudioMetricsChart(profile = profile)
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            com.example.ui.VoiceAnalysisDashboardUI(profile = profile)
         }
     }
 }
@@ -1848,10 +2143,10 @@ fun MetricBarItem(label: String, value: Int, inverted: Boolean = false, color: C
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
+            Text(text = label, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
             Text(
                 text = if (inverted) "$value% (נקי: $displayedPercentage%)" else "$value%",
-                fontSize = 10.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (inverted && value > 30) MaterialTheme.colorScheme.error else color
             )
@@ -1881,7 +2176,7 @@ fun MetricBarItem(label: String, value: Int, inverted: Boolean = false, color: C
             }
             Text(
                 text = qualityLabel,
-                fontSize = 8.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = color,
                 modifier = Modifier.width(42.dp),
@@ -2024,7 +2319,7 @@ fun Html5AudioPlayer(
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "נגן אודיו מובנה 🌐 HTML5 Core",
-                        fontSize = 11.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF5F6368)
                     )
@@ -2038,7 +2333,7 @@ fun Html5AudioPlayer(
                 ) {
                     Text(
                         text = "${speed}x מהירות",
-                        fontSize = 9.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF1A73E8)
                     )
@@ -2067,7 +2362,7 @@ fun Html5AudioPlayer(
                     )
                     Text(
                         text = if (isAnyPlaying) trackTitle else "אין שמע פעיל להפעלה",
-                        fontSize = 11.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF3C4043),
                         maxLines = 1,
@@ -2097,7 +2392,7 @@ fun Html5AudioPlayer(
             ) {
                 Text(
                     text = elapsed,
-                    fontSize = 11.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     color = Color(0xFF5F6368)
                 )
@@ -2117,7 +2412,7 @@ fun Html5AudioPlayer(
 
                 Text(
                     text = duration,
-                    fontSize = 11.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     color = Color(0xFF5F6368)
                 )
@@ -2174,31 +2469,139 @@ fun Html5AudioPlayer(
                 }
 
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.weight(1f).padding(start = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    listOf(1.0f, 1.25f, 1.5f, 2.0f).forEach { targetSpeed ->
-                        val isSelected = speed == targetSpeed
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (isSelected) Color(0xFF4285F4) else Color.White)
-                                .border(1.dp, if (isSelected) Color(0xFF4285F4) else Color(0xFFDADCE0), RoundedCornerShape(6.dp))
-                                .clickable {
-                                    viewModel.setPlaybackSpeed(targetSpeed)
-                                }
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "${targetSpeed}x",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isSelected) Color.White else Color(0xFF5F6368)
-                            )
-                        }
-                    }
+                    val formattedSpeed = String.format(java.util.Locale.US, "%.1fx", speed)
+                    Text(
+                        text = "קצב ניגון: $formattedSpeed",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF5F6368)
+                    )
+                    Slider(
+                        value = speed,
+                        onValueChange = { viewModel.setPlaybackSpeed(it) },
+                        valueRange = 0.5f..2.0f,
+                        steps = 14,
+                        modifier = Modifier.weight(1f).height(24.dp),
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color(0xFF4285F4),
+                            activeTrackColor = Color(0xFF4285F4),
+                            inactiveTrackColor = Color(0xFFDADCE0)
+                        )
+                    )
                 }
             }
         }
     }
 }
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsDialog(
+    viewModel: VoiceClonerViewModel,
+    onDismiss: () -> Unit
+) {
+    var showDatePicker by remember { mutableStateOf(false) }
+    var selectedDateMillis by remember { mutableStateOf<Long?>(null) }
+    
+    val context = LocalContext.current
+    val datePickerState = androidx.compose.material3.rememberDatePickerState()
+    
+    if (showDatePicker) {
+        androidx.compose.material3.DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = { 
+                    selectedDateMillis = datePickerState.selectedDateMillis
+                    showDatePicker = false
+                }) {
+                    Text("אישור")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("ביטול")
+                }
+            }
+        ) {
+            androidx.compose.material3.DatePicker(state = datePickerState)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Default.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text("הגדרות חשבון", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "מועד מחיקה מתוזמן (אופציונלי):",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                
+                OutlinedButton(
+                    onClick = { showDatePicker = true },
+                    modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp)
+                ) {
+                    val dateStr = if (selectedDateMillis != null) {
+                        val sdf = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+                        sdf.format(java.util.Date(selectedDateMillis!!))
+                    } else "בחר תאריך יעד..."
+                    Text(text = dateStr, fontSize = 16.sp)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "סגירת החשבון",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
+                )
+                Text(
+                    text = "מחיקת החשבון תסיר לצמיתות את כל פרופילי הקול וההקלטות ממסד הנתונים.",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+
+                Button(
+                    onClick = {
+                        viewModel.deleteAllData()
+                        android.widget.Toast.makeText(context, "כל הנתונים והחשבון נמחקו לצמיתות.", android.widget.Toast.LENGTH_LONG).show()
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("מחק חשבון ונתונים", fontSize = 16.sp)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.defaultMinSize(minHeight = 48.dp)) {
+                Text("סגור", fontSize = 16.sp)
+            }
+        }
+    )
+}
+

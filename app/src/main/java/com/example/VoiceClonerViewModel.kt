@@ -32,11 +32,45 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
     private val voiceDao = database.voiceDao()
     private val audioHelper = AudioHelper(application)
 
+    private val sharedPrefs = application.getSharedPreferences("voice_cloner_prefs", android.content.Context.MODE_PRIVATE)
+
+    private val _customApiKey = MutableStateFlow("")
+    val customApiKey: StateFlow<String> = _customApiKey.asStateFlow()
+
+    private val _isApiKeyAvailable = MutableStateFlow(false)
+    val isApiKeyAvailable: StateFlow<Boolean> = _isApiKeyAvailable.asStateFlow()
+
+    fun getEffectiveApiKey(): String {
+        val customKey = _customApiKey.value.trim()
+        if (customKey.isNotEmpty()) {
+            return customKey
+        }
+        val defKey = BuildConfig.GEMINI_API_KEY
+        if (defKey.isNotEmpty() && defKey != "MY_GEMINI_API_KEY") {
+            return defKey
+        }
+        return ""
+    }
+
+    private fun updateApiKeyAvailability() {
+        val key = getEffectiveApiKey()
+        _isApiKeyAvailable.value = key.isNotEmpty()
+    }
+
+    fun saveCustomApiKey(key: String) {
+        sharedPrefs.edit().putString("custom_gemini_api_key", key.trim()).apply()
+        _customApiKey.value = key.trim()
+        updateApiKeyAvailability()
+    }
+
     private var tts: TextToSpeech? = null
     private val _isTtsReady = MutableStateFlow(false)
     val isTtsReady: StateFlow<Boolean> = _isTtsReady.asStateFlow()
 
     init {
+        val savedKey = sharedPrefs.getString("custom_gemini_api_key", "") ?: ""
+        _customApiKey.value = savedKey
+        updateApiKeyAvailability()
         try {
             tts = TextToSpeech(application) { status ->
                 if (status == TextToSpeech.SUCCESS) {
@@ -475,6 +509,41 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun getFriendlyErrorMessage(throwable: Throwable): String {
+        val msg = throwable.message ?: ""
+        
+        // Handle 503 Service Unavailable / Overblown servers
+        if (msg.contains("503") || throwable is java.net.SocketTimeoutException) {
+            return "שרתי ה-Gemini AI עמוסים כעת זמנית (שגיאה 503). אנא המתן מספר שניות ונסה שוב, המערכת חוזרת לפעילות באופן אוטומטי."
+        }
+        
+        // Handle 403 / 103 / Bad API key
+        if (msg.contains("403") || msg.contains("103") || msg.contains("API key not valid") || msg.contains("API_KEY_INVALID")) {
+            return "שגיאת הרשאה (שגיאה 403): מפתח ה-Gemini שהוזן אינו תקין או פג תוקפו. אנא לחץ על כפתור המפתח למעלה בלוח הבקרה כדי להזין מפתח API תקין."
+        }
+        
+        // Handle 429 Rate limits
+        if (msg.contains("429")) {
+            return "חרגת ממכסת הבקשות עבור מפתח ה-API הנוכחי (שגיאה 429). אנא המתן דקה-שתיים לפני הניסיון הבא."
+        }
+        
+        // Handle 400 Bad request / invalid params
+        if (msg.contains("400")) {
+            return "הבקשה נדחתה על ידי השרת (שגיאה 400). ייתכן ודגימת הקול קצרה או ארוכה מדי, או שהזנת טקסט שאינו נתמך בדגם."
+        }
+        
+        // Network connectivity failures
+        if (throwable is java.net.UnknownHostException || throwable is java.net.ConnectException) {
+            return "חיבור האינטרנט נכשל או אינו יציב. אנא ודא שהמכשיר מחובר לרשת ונסה שוב."
+        }
+        
+        if (throwable is java.io.IOException) {
+            return "שגיאה בקריאה או שמירה של קובץ השמע המקומי במכשיר."
+        }
+        
+        return msg.ifEmpty { "שגיאה לא צפויה בעיבוד הבקשה. אנא נסו להקליט ולשלוח שוב." }
+    }
+
     fun cloneAndAnalyze(name: String, gender: String, description: String) {
         val file = _recordedFile.value
         if (file == null) {
@@ -487,9 +556,9 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val apiKey = BuildConfig.GEMINI_API_KEY
-                if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
-                    throw IllegalStateException("אנא הגדר מפתח Gemini API תקין בהגדרות או בקובץ .env")
+                val apiKey = getEffectiveApiKey()
+                if (apiKey.isEmpty()) {
+                    throw IllegalStateException("אנא הגדר מפתח Gemini API תקין בלוח הבקרה / הגדרות האפליקציה או בקובץ .env")
                 }
 
                 val base64Audio = audioHelper.fileToBase64(file)
@@ -595,13 +664,19 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                 Log.e("VoiceClonerViewModel", "Analysis failed", e)
                 withContext(Dispatchers.Main) {
                     _isAnalyzing.value = false
-                    _analysisError.value = e.message ?: "חיבור רשת נכשל"
+                    _analysisError.value = getFriendlyErrorMessage(e)
                 }
             }
         }
     }
 
-    fun synthesizeText(text: String, profile: VoiceProfile) {
+    fun synthesizeText(
+        text: String, 
+        profile: VoiceProfile,
+        pitchTuningPercent: Float = 0f,
+        speedTuningPercent: Float = 0f,
+        vibeModifier: String = "מקורי"
+    ) {
         if (text.isBlank()) {
             _synthesizeError.value = "אנא הזן טקסט לייצור קול"
             return
@@ -612,14 +687,63 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val apiKey = BuildConfig.GEMINI_API_KEY
-                if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
-                    throw IllegalStateException("אנא הגדר מפתח Gemini API תקין בהגדרות או בקובץ .env")
+                val apiKey = getEffectiveApiKey()
+                if (apiKey.isEmpty()) {
+                    throw IllegalStateException("אנא הגדר מפתח Gemini API תקין בלוח הבקרה / הגדרות האפליקציה או בקובץ .env")
                 }
 
-                // Construct request for TTS modality
-                val promptText = "Say the following text in Hebrew: $text"
-                
+                // Determine acoustic pacing, pitch, and vibe directives based on analyzed characteristics
+                val basePace = when {
+                    profile.pace.contains("מהיר") || profile.pace.contains("מהירה") || profile.pace.lowercase().contains("fast") -> "high-speed tempo, rapid articulation, short word gaps"
+                    profile.pace.contains("איטי") || profile.pace.contains("איטית") || profile.pace.lowercase().contains("slow") -> "slow, tranquil, deliberate pace with frequent natural breathing pauses"
+                    else -> "steady, moderate, natural speaking pace with normal pauses"
+                }
+
+                val basePitch = when {
+                    profile.frequencyHz < 110 -> "very deep, baritone, resonant low-pitch chest voice"
+                    profile.frequencyHz < 150 -> "moderately low-pitch register with rich vocal warmth"
+                    profile.frequencyHz > 215 -> "clear, high-pitched, feminine, melodic soprano tone"
+                    profile.frequencyHz > 175 -> "moderately high-pitched, bright, warm alto style"
+                    else -> "neutral mid-range pitch, balanced larynx position"
+                }
+
+                // Add slider adjustments to the prompt text if modified
+                val userSpeedAdjustment = when {
+                    speedTuningPercent > 10f -> "Increase speaking rate and speed by ${speedTuningPercent.toInt()}% for a faster, snappier flow."
+                    speedTuningPercent < -10f -> "Slow down speaking rate and pace by ${Math.abs(speedTuningPercent.toInt())}% for a calmer, elongated cadence."
+                    else -> "Keep speaking rate naturally aligned with the profile."
+                }
+
+                val userPitchAdjustment = when {
+                    pitchTuningPercent > 10f -> "Raise the vocal register/pitch by ${pitchTuningPercent.toInt()}% higher than standard for brighter resonance."
+                    pitchTuningPercent < -10f -> "Lower the vocal register/pitch by ${Math.abs(pitchTuningPercent.toInt())}% deeper for extra chest resonance."
+                    else -> "Match the natural frequency of the profile."
+                }
+
+                val activeVibe = if (vibeModifier != "מקורי") {
+                    "Express the text with an explicit '$vibeModifier' custom emotional inflection override."
+                } else {
+                    "Express with a ${profile.vibe} mood and ${profile.tone} signature, exactly mirroring the original speaker's vibe."
+                }
+
+                // We construct a highly detailed voice modulation prompt in English (as Gemini processes prompt directives for audio in OOB dynamic voices extremely well)
+                val promptText = """
+                    SYSTEM COMMAND: Perform an extremely accurate, high-fidelity 1:1 voice cloning emulation of ${profile.name} (Gender: ${profile.gender}).
+                    You are speaking directly as ${profile.name} himself/herself. Modulate your generated speech to replicate these traits perfectly:
+                    
+                    AUDIO ATTRIBUTES TO EMULATE:
+                    1. Target Vocal Pitch Register: $basePitch (Fundamental frequency: ${profile.frequencyHz} Hz). -> Apply tuning: $userPitchAdjustment
+                    2. Speech Cadence/Pacing: $basePace. -> Apply tuning: $userSpeedAdjustment
+                    3. Vocal Quality and Tone: ${profile.tone} (${profile.description}).
+                    4. Emotional Delivery Aura / Vibe: $activeVibe.
+                    5. Intonation Rhythm Score: ${profile.intonationScore}/100.
+                    6. Articulation & Hebrew Accents: ${profile.pronunciationClarity}/100 clarity.
+
+                    Read the following Hebrew text exactly as written. Ensure incredibly natural phrasing, proper Hebrew accents, and flawless vocal fidelity:
+                    
+                    "$text"
+                """.trimIndent()
+
                 val requestJson = JSONObject().apply {
                     put("contents", JSONArray().apply {
                         put(JSONObject().apply {
@@ -705,13 +829,18 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                 Log.e("VoiceClonerViewModel", "Synthesis failed", e)
                 withContext(Dispatchers.Main) {
                     _isSynthesizing.value = false
-                    _synthesizeError.value = e.message ?: "שגיאה בחיבור אל שרת ג׳מיני קול"
+                    _synthesizeError.value = getFriendlyErrorMessage(e)
                 }
             }
         }
     }
 
-    fun synthesizeTextLocal(text: String, profile: VoiceProfile) {
+    fun synthesizeTextLocal(
+        text: String, 
+        profile: VoiceProfile,
+        pitchTuningPercent: Float = 0f,
+        speedTuningPercent: Float = 0f
+    ) {
         if (text.isBlank()) {
             _synthesizeError.value = "אנא הזן טקסט לייצור קול"
             return
@@ -728,21 +857,29 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                 }
 
                 // Map frequencyHz to a pitch multiplier
-                val pitchMultiplier: Float = when {
+                var pitchMultiplier: Float = when {
                     profile.frequencyHz <= 100 -> 0.70f
                     profile.frequencyHz <= 125 -> 0.82f
                     profile.frequencyHz >= 210 -> 1.35f
                     profile.frequencyHz >= 180 -> 1.20f
                     else -> 1.0f
                 }
+                
+                // Apply manual calibration slider multiplier (e.g. -50% to +50%)
+                val pitchModFactor = 1.0f + (pitchTuningPercent / 100f)
+                pitchMultiplier = (pitchMultiplier * pitchModFactor).coerceIn(0.5f, 2.0f)
                 currentTts.setPitch(pitchMultiplier)
 
                 // Map pace description to speech rate multiplier
-                val rateMultiplier: Float = when {
+                var rateMultiplier: Float = when {
                     profile.pace.contains("מהיר") || profile.pace.contains("מהירה") || profile.pace.lowercase().contains("fast") -> 1.25f
                     profile.pace.contains("איטי") || profile.pace.contains("איטית") || profile.pace.lowercase().contains("slow") -> 0.78f
                     else -> 1.00f
                 }
+                
+                // Apply manual pace calibration slider multiplier
+                val speedModFactor = 1.0f + (speedTuningPercent / 100f)
+                rateMultiplier = (rateMultiplier * speedModFactor).coerceIn(0.5f, 2.0f)
                 currentTts.setSpeechRate(rateMultiplier)
 
                 // Trigger speaking using modern or deprecated method depending on API
@@ -937,6 +1074,13 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                     onResult(false, "כשל ביצירת גיבוי: ${e.message}")
                 }
             }
+        }
+    }
+
+    fun deleteAllData() {
+        viewModelScope.launch(Dispatchers.IO) {
+            voiceDao.deleteAllGenerationResults()
+            voiceDao.deleteAllProfiles()
         }
     }
 
