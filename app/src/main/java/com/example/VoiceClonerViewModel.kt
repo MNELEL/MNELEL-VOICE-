@@ -120,6 +120,9 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
     private val _playbackSpeed = MutableStateFlow(1.0f)
     val playbackSpeed: StateFlow<Float> = _playbackSpeed.asStateFlow()
 
+    private val _acousticPreset = MutableStateFlow("None") // "None", "Studio", "Room", "Hall", "Cathedral"
+    val acousticPreset: StateFlow<String> = _acousticPreset.asStateFlow()
+
     private val _playerTrackTitle = MutableStateFlow("קובץ שמע אינו פעיל 📭")
     val playerTrackTitle: StateFlow<String> = _playerTrackTitle.asStateFlow()
 
@@ -129,6 +132,11 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
     fun setPlaybackSpeed(speed: Float) {
         _playbackSpeed.value = speed
         audioHelper.setPlaybackSpeed(speed)
+    }
+
+    fun setAcousticPreset(preset: String) {
+        _acousticPreset.value = preset
+        audioHelper.activeAcousticPreset = preset
     }
 
     fun togglePlayerMute() {
@@ -1143,6 +1151,191 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                 withContext(Dispatchers.Main) {
                     onResult(false, "שגיאה בפענוח קובץ הגיבוי. ודא שהקובץ תקין ודחוס בפורמט התואם.")
                 }
+            }
+        }
+    }
+
+    // --- Core Speaker Diarization / Auto-Detection Module ---
+    
+    private val _diarizationSegments = MutableStateFlow<List<com.example.data.DiarizationSegment>>(emptyList())
+    val diarizationSegments: StateFlow<List<com.example.data.DiarizationSegment>> = _diarizationSegments.asStateFlow()
+
+    private val _isDiarizing = MutableStateFlow(false)
+    val isDiarizing: StateFlow<Boolean> = _isDiarizing.asStateFlow()
+
+    private val _diarizationError = MutableStateFlow<String?>(null)
+    val diarizationError: StateFlow<String?> = _diarizationError.asStateFlow()
+
+    private val _diarizationAudioFile = MutableStateFlow<File?>(null)
+    val diarizationAudioFile: StateFlow<File?> = _diarizationAudioFile.asStateFlow()
+
+    fun setDiarizationAudioFile(file: File) {
+        _diarizationAudioFile.value = file
+    }
+
+    fun clearDiarizationResult() {
+        _diarizationSegments.value = emptyList()
+        _diarizationError.value = null
+        _diarizationAudioFile.value = null
+    }
+
+    fun updateSegmentAssignment(segmentId: String, profile: VoiceProfile?) {
+        val currentList = _diarizationSegments.value.map { segment ->
+            if (segment.id == segmentId) {
+                segment.copy(
+                    assignedProfileId = profile?.id,
+                    assignedProfileName = profile?.name
+                )
+            } else {
+                segment
+            }
+        }
+        _diarizationSegments.value = currentList
+    }
+
+    fun runSpeakerDiarization(profilesList: List<VoiceProfile>) {
+        val file = _diarizationAudioFile.value
+        if (file == null) {
+            _diarizationError.value = "אנא בחרו קובץ שמע לניתוח דוברים מרובים"
+            return
+        }
+        _isDiarizing.value = true
+        _diarizationError.value = null
+        _diarizationSegments.value = emptyList()
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val apiKey = getEffectiveApiKey()
+                if (apiKey.isEmpty()) {
+                    throw IllegalStateException("אנא הגדירו מפתח Gemini API תקין בלוח הבקרה / הגדרות כדי לבצע אנליזה.")
+                }
+
+                val base64Audio = audioHelper.fileToBase64(file)
+                    ?: throw java.io.IOException("שגיאה בקריאת קובץ השמע")
+
+                // Convert profiles list to metadata metadata to guide Gemini
+                val profilesMetaJson = JSONArray().apply {
+                    profilesList.forEach { profile ->
+                        put(JSONObject().apply {
+                            put("id", profile.id)
+                            put("name", profile.name)
+                            put("gender", profile.gender)
+                            put("pitchDesc", profile.pitch)
+                            put("toneDesc", profile.tone)
+                            put("description", profile.description)
+                        })
+                    }
+                }
+
+                val prompt = "Analyze the provided multi-speaker audio recording and perform speaker diarization (segmenting the dialog based on speakers). " +
+                        "Compare each speaking voice qualities in the audio with the list of existing voice profiles provided below. " +
+                        "For each speech segment, detect start and end time, transcribe the Hebrew words accurately, and find who matches closely. " +
+                        "If a speaker in the segment does not match any profile closely, mark their detectedSpeakerName as 'דובר לא ידוע 👥' (or e.g. 'דובר א'', 'דוברת ב'') and set assignedProfileId to null. " +
+                        "Provide your response EXACTLY in the following JSON format structure:\n" +
+                        "{\n" +
+                        "  \"segments\": [\n" +
+                        "    {\n" +
+                        "      \"id\": \"segment_1\",\n" +
+                        "      \"startTime\": \"(MM:SS, e.g. 00:03)\",\n" +
+                        "      \"endTime\": \"(MM:SS, e.g. 00:11)\",\n" +
+                        "      \"text\": \"(Dialogue transcript in Hebrew of this segment/משפט שנאמר)\",\n" +
+                        "      \"detectedSpeakerName\": \"(Name of matched profile, or human label if unknown)\",\n" +
+                        "      \"confidence\": (Integer percentage 0-100 indicating confidence level),\n" +
+                        "      \"voiceCharacteristics\": \"(Briefly describe character, e.g. 'קול גברי נמוך עם קצב מילולי מדוד')\",\n" +
+                        "      \"assignedProfileId\": (Matched Profile ID from the list as an Integer value, or null if unknown)\n" +
+                        "    }\n" +
+                        "  ]\n" +
+                        "}\n\n" +
+                        "Existing Voice Profiles to match against:\n" +
+                        profilesMetaJson.toString()
+
+                val requestJson = JSONObject().apply {
+                    put("contents", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("parts", JSONArray().apply {
+                                put(JSONObject().apply {
+                                    put("text", prompt)
+                                })
+                                put(JSONObject().apply {
+                                    put("inlineData", JSONObject().apply {
+                                        put("mimeType", "audio/aac")
+                                        put("data", base64Audio)
+                                    })
+                                })
+                            })
+                        })
+                    })
+                    put("generationConfig", JSONObject().apply {
+                        put("responseMimeType", "application/json")
+                    })
+                }
+
+                val mediaType = "application/json; charset=utf-8".toMediaType()
+                val requestBody = requestJson.toString().toRequestBody(mediaType)
+                val request = Request.Builder()
+                    .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$apiKey")
+                    .post(requestBody)
+                    .build()
+
+                val response = okHttpClient.newCall(request).execute()
+                if (!response.isSuccessful) {
+                    throw IllegalStateException("שגיאת שרת: ${response.code} ${response.message}")
+                }
+
+                val responseBodyStr = response.body?.string() ?: throw IllegalStateException("תגובה ריקה מהשרת")
+                val responseObj = JSONObject(responseBodyStr)
+                val candidates = responseObj.getJSONArray("candidates")
+                val parts = candidates.getJSONObject(0).getJSONObject("content").getJSONArray("parts")
+                val rawText = parts.getJSONObject(0).getString("text")
+
+                val parsedResult = JSONObject(rawText)
+                val segmentsArr = parsedResult.getJSONArray("segments")
+                val parsedSegmentsList = mutableListOf<com.example.data.DiarizationSegment>()
+
+                for (i in 0 until segmentsArr.length()) {
+                    val segObj = segmentsArr.getJSONObject(i)
+                    val id = segObj.optString("id", "segment_$i")
+                    val startTime = segObj.optString("startTime", "00:00")
+                    val endTime = segObj.optString("endTime", "00:00")
+                    val text = segObj.optString("text", "")
+                    val detectedSpeakerName = segObj.optString("detectedSpeakerName", "דובר לא ידוע")
+                    val confidence = segObj.optInt("confidence", 85)
+                    val voiceCharacteristics = segObj.optString("voiceCharacteristics", "")
+                    val assignedProfileId = if (segObj.isNull("assignedProfileId")) null else segObj.getInt("assignedProfileId")
+
+                    var matchedProfileName: String? = null
+                    var finalizedProfileId: Int? = null
+
+                    if (assignedProfileId != null) {
+                        val match = profilesList.find { it.id == assignedProfileId }
+                        if (match != null) {
+                            finalizedProfileId = match.id
+                            matchedProfileName = match.name
+                        }
+                    }
+
+                    parsedSegmentsList.add(
+                        com.example.data.DiarizationSegment(
+                            id = id,
+                            startTime = startTime,
+                            endTime = endTime,
+                            text = text,
+                            detectedSpeakerName = detectedSpeakerName,
+                            confidence = confidence,
+                            voiceCharacteristics = voiceCharacteristics,
+                            assignedProfileId = finalizedProfileId,
+                            assignedProfileName = matchedProfileName
+                        )
+                    )
+                }
+
+                _diarizationSegments.value = parsedSegmentsList
+
+            } catch (e: Exception) {
+                Log.e("VoiceClonerViewModel", "Speaker Diarization analysis failed", e)
+                _diarizationError.value = "שגיאת אנליזה: ${e.message ?: "אנא ודאו שמפתח ה-API תקין ונסו שנית."}"
+            } finally {
+                _isDiarizing.value = false
             }
         }
     }

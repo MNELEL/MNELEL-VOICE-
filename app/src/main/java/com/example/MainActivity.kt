@@ -1021,6 +1021,13 @@ fun VoiceClonerAppScreen(
                     Html5AudioPlayer(viewModel = viewModel)
                 }
 
+                item {
+                    com.example.ui.MultiSpeakerDiarizationView(
+                        viewModel = viewModel,
+                        profiles = profiles
+                    )
+                }
+
                 // Section 2: Headline
                 item {
                     Row(
@@ -1628,6 +1635,48 @@ fun VoiceProfileCard(
                         maxLines = 3,
                         shape = RoundedCornerShape(12.dp)
                     )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "הצעות מהירות לטקסט:",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val suggestions = listOf(
+                            "שלום, זהו קול הבדיקה שלי.",
+                            "מערכת הבינה המלאכותית פועלת היטב.",
+                            "אנא הקליטו בסביבה שקטה למניעת רעש."
+                        )
+                        suggestions.forEach { suggestion ->
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f))
+                                    .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
+                                    .clickable { onSynthTextChange(suggestion) }
+                                    .padding(horizontal = 6.dp, vertical = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = suggestion,
+                                    fontSize = 14.sp,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 2,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(10.dp))
 
@@ -2492,6 +2541,62 @@ fun Html5AudioPlayer(
                             inactiveTrackColor = Color(0xFFDADCE0)
                         )
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            HorizontalDivider(color = Color(0xFFDADCE0))
+            Spacer(modifier = Modifier.height(6.dp))
+
+            val currentPreset by viewModel.acousticPreset.collectAsStateWithLifecycle()
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "ייצוא או פילטרים ועריכת אקוסטיקה (אפקט Reverbs):",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF5F6368)
+                )
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    val presets = listOf(
+                        "None" to "רגיל 👤",
+                        "Studio" to "אולפן 🎙️",
+                        "Room" to "חדר 🏠",
+                        "Hall" to "אולם 🏛️",
+                        "Cathedral" to "הד ⛪"
+                    )
+                    
+                    presets.forEach { (presetKey, displayName) ->
+                        val isSelected = currentPreset == presetKey
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) Color(0xFF4285F4) else Color.White)
+                                .border(1.dp, if (isSelected) Color(0xFF4285F4) else Color(0xFFDADCE0), RoundedCornerShape(8.dp))
+                                .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
+                                .clickable {
+                                    viewModel.setAcousticPreset(presetKey)
+                                }
+                                .padding(horizontal = 4.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = displayName,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) Color.White else Color(0xFF5F6368),
+                                textAlign = TextAlign.Center,
+                                maxLines = 1
+                            )
+                        }
+                    }
                 }
             }
         }

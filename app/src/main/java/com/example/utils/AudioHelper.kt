@@ -94,6 +94,9 @@ class AudioHelper(private val context: Context) {
         }
     }
 
+    private var presetReverb: android.media.audiofx.PresetReverb? = null
+    var activeAcousticPreset: String = "None" // "None", "Studio", "Room", "Hall", "Cathedral"
+
     // --- Playback ---
 
     fun playAudio(file: File, playbackSpeed: Float = 1.0f, onCompletion: () -> Unit) {
@@ -109,6 +112,31 @@ class AudioHelper(private val context: Context) {
                         Log.e("AudioHelper", "Failed to set playback speed", e)
                     }
                 }
+                
+                if (activeAcousticPreset != "None") {
+                    try {
+                        val presetVal: Short = when (activeAcousticPreset) {
+                            "Studio" -> android.media.audiofx.PresetReverb.PRESET_SMALLROOM
+                            "Room" -> android.media.audiofx.PresetReverb.PRESET_LARGEROOM
+                            "Hall" -> android.media.audiofx.PresetReverb.PRESET_LARGEHALL
+                            "Cathedral" -> android.media.audiofx.PresetReverb.PRESET_PLATE
+                            else -> 0
+                        }
+                        if (presetVal > 0) {
+                            presetReverb?.release()
+                            presetReverb = android.media.audiofx.PresetReverb(1, audioSessionId).apply {
+                                preset = presetVal
+                                enabled = true
+                            }
+                            attachAuxEffect(presetReverb!!.id)
+                            setAuxEffectSendLevel(1.0f)
+                            Log.d("AudioHelper", "Applied PresetReverb $activeAcousticPreset to session $audioSessionId")
+                        }
+                    } catch (e: Exception) {
+                        Log.e("AudioHelper", "Failed to apply PresetReverb", e)
+                    }
+                }
+
                 start()
                 setOnCompletionListener {
                     onCompletion()
@@ -124,6 +152,15 @@ class AudioHelper(private val context: Context) {
 
     fun stopPlayback() {
         try {
+            presetReverb?.apply {
+                try {
+                    enabled = false
+                    release()
+                } catch (e: Exception) {
+                    Log.e("AudioHelper", "Failed to disable presetReverb", e)
+                }
+            }
+            presetReverb = null
             mediaPlayer?.apply {
                 if (isPlaying) {
                     stop()

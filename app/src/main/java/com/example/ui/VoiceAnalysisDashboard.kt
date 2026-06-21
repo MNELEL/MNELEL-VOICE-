@@ -40,7 +40,7 @@ fun VoiceAnalysisDashboardUI(
     modifier: Modifier = Modifier
 ) {
     var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("דיוק פונטי והגייה", "ניתוח תדרי קול (Pitch)")
+    val tabs = listOf("דיוק פונטי והגייה", "ניתוח תדרי קול (Pitch)", "רעשי רקע וסביבה (Noise)")
 
     Card(
         modifier = modifier
@@ -131,6 +131,7 @@ fun VoiceAnalysisDashboardUI(
                 when (targetTab) {
                     0 -> PhoneticAccuracyTabContent(profile = profile)
                     1 -> PitchFrequencyTabContent(profile = profile)
+                    2 -> NoiseLevelsTabContent(profile = profile)
                 }
             }
         }
@@ -536,5 +537,221 @@ fun PitchFrequencyTabContent(profile: VoiceProfile) {
                 modifier = Modifier.weight(1f)
             )
         }
+    }
+}
+
+@OptIn(ExperimentalTextApi::class)
+@Composable
+fun NoiseLevelsTabContent(profile: VoiceProfile, modifier: Modifier = Modifier) {
+    val textMeasurer = rememberTextMeasurer()
+    val noisePurity = (100 - profile.distortionLevel).coerceIn(0, 100)
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = "אנליזה של רעש סביבתי ועיוות אות קול",
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = "תרשים האוסצילוסקופ להלן מדגים את ההפרדה בין אות הדיבור הטהור לבין רעשי הרקע שנקלטו.",
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        // Custom drawn Oscilloscope for Signal-to-Noise Ratio (SNR)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp)
+                .background(Color(0xFF0F172A), RoundedCornerShape(12.dp))
+                .border(1.dp, Color(0xFF334155), RoundedCornerShape(12.dp))
+                .padding(12.dp)
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val width = size.width
+                val height = size.height
+                val centerY = height * 0.5f
+
+                // 1. Draw zero-baseline reference grid line
+                drawLine(
+                    color = Color(0xFF1E293B),
+                    start = Offset(0f, centerY),
+                    end = Offset(width, centerY),
+                    strokeWidth = 1.dp.toPx()
+                )
+
+                // Draw helper grid gridlines
+                val gridLines = 4
+                for (i in 1 until gridLines) {
+                    val x = width * (i.toFloat() / gridLines)
+                    drawLine(
+                        color = Color(0xFF1E293B),
+                        start = Offset(x, 0f),
+                        end = Offset(x, height),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                }
+
+                // 2. Draw standard signal waves
+                val points = 60
+                val pathVoice = Path()
+                val pathNoise = Path()
+
+                val distortionMod = profile.distortionLevel.toFloat() / 100f
+                val signalStrength = (1f - distortionMod).coerceIn(0.2f, 1.0f)
+
+                for (i in 0..points) {
+                    val x = (i.toFloat() / points) * width
+
+                    // Sine Voice Wave (Smooth, clean, emerald green)
+                    val voiceAmp = centerY * 0.7f * signalStrength
+                    val voiceF = 0.15f
+                    val yVoice = centerY + kotlin.math.sin(i.toFloat() * voiceF) * voiceAmp
+
+                    // Aggressive jagged Background Noise representation (Choppy red wave)
+                    val noiseAmp = centerY * 0.6f * distortionMod
+                    val noiseF = 0.75f
+                    val jaggedMultiplier = if (i % 2 == 0) 1.2f else 0.4f
+                    val yNoise = centerY + kotlin.math.sin(i.toFloat() * noiseF) * noiseAmp * jaggedMultiplier
+
+                    if (i == 0) {
+                        pathVoice.moveTo(x, yVoice)
+                        pathNoise.moveTo(x, yNoise)
+                    } else {
+                        pathVoice.lineTo(x, yVoice)
+                        pathNoise.lineTo(x, yNoise)
+                    }
+                }
+
+                // Draw background noise wave first
+                if (profile.distortionLevel > 0) {
+                    drawPath(
+                        path = pathNoise,
+                        color = Color(0xFFEF4444).copy(alpha = 0.65f),
+                        style = Stroke(width = 1.5.dp.toPx())
+                    )
+                }
+
+                // Draw clean speech signal wave on top
+                drawPath(
+                    path = pathVoice,
+                    color = Color(0xFF10B981),
+                    style = Stroke(width = 2.5.dp.toPx())
+                )
+
+                // Label on the graph
+                drawText(
+                    textMeasurer = textMeasurer,
+                    text = "אות דיבור (Signal)",
+                    topLeft = Offset(10.dp.toPx(), 8.dp.toPx()),
+                    style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF10B981))
+                )
+
+                drawText(
+                    textMeasurer = textMeasurer,
+                    text = "רעשי רקע (Noise): ${profile.distortionLevel}%",
+                    topLeft = Offset(10.dp.toPx(), 26.dp.toPx()),
+                    style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFEF4444))
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Breakdown scores & Assessment
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                    .padding(10.dp)
+            ) {
+                Column {
+                    Text("ציון ניקיון קולי", fontSize = 14.sp, color = Color.Gray)
+                    Text(
+                        text = "$noisePurity%",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Black,
+                        color = if (noisePurity >= 80) Color(0xFF10B981) else if (noisePurity >= 60) Color(0xFFF59E0B) else Color(0xFFEF4444)
+                    )
+                    Text(
+                        text = if (noisePurity >= 80) "איכות אולפן מעולה" else if (noisePurity >= 60) "איכות סבירה" else "רועש - מומלץ להקליט שוב",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (noisePurity >= 80) Color(0xFF2E7D32) else if (noisePurity >= 60) Color(0xFFD97706) else Color(0xFFB91C1C)
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                    .padding(10.dp)
+            ) {
+                Column {
+                    Text("רמת רעש רקע (dB-est)", fontSize = 14.sp, color = Color.Gray)
+                    val dbEst = (profile.distortionLevel * 0.6f + 30).toInt()
+                    Text(
+                        text = "~$dbEst dB",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Black,
+                        color = if (dbEst < 45) Color(0xFF10B981) else if (dbEst < 60) Color(0xFFF59E0B) else Color(0xFFEF4444)
+                    )
+                    Text(
+                        text = if (dbEst < 45) "ללא הפרעות מורגשות" else if (dbEst < 60) "נוכחות רעש קלה" else "הפרעות רעש קשות",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (dbEst < 45) Color(0xFF2E7D32) else if (dbEst < 60) Color(0xFFD97706) else Color(0xFFB91C1C)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Environmental Tips for cloning optimization
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
+            ),
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(10.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(text = "💡", fontSize = 16.sp)
+                    Text(
+                        text = "טיפים לשיבוט קול מושלם:",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                BulletText("הקלט בחדר סגור, הרחק ממאווררים, מזגנים או מכשירי חשמל רועשים.")
+                BulletText("הנח את הטלפון במרחק של כ-15-20 ס״מ מהפה לקבלת סיגנל מאוזן.")
+                BulletText("פרוס שטיח או כריות בחדר כדי למנוע החזר הד (Reverb) שפוגע באינטונציה.")
+            }
+        }
+    }
+}
+
+@Composable
+fun BulletText(text: String) {
+    Row(
+        modifier = Modifier.padding(start = 4.dp, bottom = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(text = "•", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        Text(text = text, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
     }
 }
