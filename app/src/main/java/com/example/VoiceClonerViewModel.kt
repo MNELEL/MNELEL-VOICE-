@@ -91,6 +91,7 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
             Log.e("VoiceClonerViewModel", "Failed to construct TextToSpeech", e)
         }
         seedDefaultStyleTemplates()
+        seedDefaultProfiles()
     }
 
     val allProfiles: StateFlow<List<VoiceProfile>> = voiceDao.getAllProfiles()
@@ -1446,6 +1447,74 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                 }
             } catch (e: Exception) {
                 Log.e("VoiceClonerViewModel", "Failed to seed default templates", e)
+            }
+        }
+    }
+
+    // Seed default voice profiles on initialize
+    private fun seedDefaultProfiles() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Get the first list emission to check if database has any profiles
+                val currentList = voiceDao.getAllProfiles().first()
+                if (currentList.isEmpty()) {
+                    val defaults = listOf(
+                        VoiceProfile(
+                            name = "איתי",
+                            gender = "זכר",
+                            description = "קריין אולפני מקצועי עם קול עמוק וסמכותי",
+                            audioPath = null,
+                            pitch = "נמוך וסמכותי",
+                            tone = "חם ורך",
+                            vibe = "רגוע ומזמין",
+                            pace = "מתון ומדויק",
+                            geminiVoiceName = "Puck",
+                            frequencyHz = 120,
+                            clarityScore = 95,
+                            pronunciationClarity = 95,
+                            intonationScore = 90,
+                            breathPauseScore = 90,
+                            distortionLevel = 5
+                        ),
+                        VoiceProfile(
+                            name = "נועה",
+                            gender = "נקבה",
+                            description = "מגישת פודקאסט אנרגטית ודינמית",
+                            audioPath = null,
+                            pitch = "גבוה ודק",
+                            tone = "נינוח ומלא",
+                            vibe = "אנרגטי וחד",
+                            pace = "מהיר וקצבי",
+                            geminiVoiceName = "Kore",
+                            frequencyHz = 220,
+                            clarityScore = 90,
+                            pronunciationClarity = 92,
+                            intonationScore = 95,
+                            breathPauseScore = 85,
+                            distortionLevel = 8
+                        ),
+                        VoiceProfile(
+                            name = "גיא",
+                            gender = "זכר",
+                            description = "שחקן קול עם טווח רגשי רחב",
+                            audioPath = null,
+                            pitch = "בינוני",
+                            tone = "עמוק ומלא",
+                            vibe = "דרמטי",
+                            pace = "איטי וברור",
+                            geminiVoiceName = "Fenrir",
+                            frequencyHz = 140,
+                            clarityScore = 85,
+                            pronunciationClarity = 88,
+                            intonationScore = 85,
+                            breathPauseScore = 95,
+                            distortionLevel = 10
+                        )
+                    )
+                    defaults.forEach { voiceDao.insertProfile(it) }
+                }
+            } catch (e: Exception) {
+                Log.e("VoiceClonerViewModel", "Failed to seed default profiles", e)
             }
         }
     }

@@ -427,7 +427,8 @@ fun VoiceClonerAppScreen(
                 "תמלול מרובה דוברים 👥",
                 "אימון וכיול מרצים 🎓",
                 "נקודות ורכישה 💎",
-                "השוואת נתוני אבחון 📊"
+                "השוואת נתוני אבחון 📊",
+                "גלריית פרופילים 🖼️"
             )
             tabs.forEachIndexed { index, label ->
                 Tab(
@@ -1359,6 +1360,12 @@ fun VoiceClonerAppScreen(
             6 -> {
                 com.example.ui.DiagnosticComparisonScreen(
                     viewModel = viewModel
+                )
+            }
+            7 -> {
+                com.example.ui.VoiceProfileGallery(
+                    profiles = profiles,
+                    onSelectProfile = { /* Handle selection (e.g. switch to current tab 0) */ }
                 )
             }
         }

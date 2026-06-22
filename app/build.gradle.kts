@@ -14,8 +14,8 @@ android {
     applicationId = "com.aistudio.voicecloner.abcvdx"
     minSdk = 24
     targetSdk = 36
-    versionCode = 11
-    versionName = "11.0"
+    versionCode = 12
+    versionName = "11.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
