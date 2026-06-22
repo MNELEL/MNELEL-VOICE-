@@ -426,7 +426,8 @@ fun VoiceClonerAppScreen(
                 "תבניות סגנון 🎭",
                 "תמלול מרובה דוברים 👥",
                 "אימון וכיול מרצים 🎓",
-                "נקודות ורכישה 💎"
+                "נקודות ורכישה 💎",
+                "השוואת נתוני אבחון 📊"
             )
             tabs.forEachIndexed { index, label ->
                 Tab(
@@ -1318,7 +1319,8 @@ fun VoiceClonerAppScreen(
                             isPlayingResultId = isPlayingResultId,
                             onPlayResultSample = { viewModel.playResultSample(it) },
                             onStopResultSample = { viewModel.stopResultSample() },
-                            onDeleteResult = { viewModel.deleteResult(it) }
+                            onDeleteResult = { viewModel.deleteResult(it) },
+                            templates = templates
                         )
                     }
                 }
@@ -1351,6 +1353,11 @@ fun VoiceClonerAppScreen(
             }
             5 -> {
                 PremiumCreditsScreen(
+                    viewModel = viewModel
+                )
+            }
+            6 -> {
+                com.example.ui.DiagnosticComparisonScreen(
                     viewModel = viewModel
                 )
             }
@@ -1569,7 +1576,8 @@ fun VoiceProfileCard(
     isPlayingResultId: Int?,
     onPlayResultSample: (com.example.data.VoiceGenerationResult) -> Unit,
     onStopResultSample: () -> Unit,
-    onDeleteResult: (com.example.data.VoiceGenerationResult) -> Unit
+    onDeleteResult: (com.example.data.VoiceGenerationResult) -> Unit,
+    templates: List<com.example.data.VoiceStyleTemplate>
 ) {
     val context = LocalContext.current
     var userPitchTuning by remember { mutableStateOf(0f) }
@@ -1894,23 +1902,24 @@ fun VoiceProfileCard(
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier.padding(bottom = 6.dp)
                             )
-                            val vibes = listOf("מקורי", "סמכותי", "רגוע", "נמרץ", "דרמטי")
-                            Row(
+                            val vibes = listOf("מקורי", "סמכותי", "רגוע", "נמרץ", "דרמטי") + templates.map { it.name }
+                            androidx.compose.foundation.lazy.LazyRow(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                vibes.forEach { vibe ->
+                                items(vibes.size) { index ->
+                                    val vibe = vibes[index]
                                     val isSelected = selectedVibeModifier == vibe
                                     Box(
                                         modifier = Modifier
-                                            .weight(1f)
                                             .clip(RoundedCornerShape(8.dp))
                                             .background(
                                                 if (isSelected) MaterialTheme.colorScheme.primary 
                                                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
                                             )
-                                            .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp).clickable { selectedVibeModifier = vibe }
-                                            .padding(vertical = 6.dp),
+                                            .defaultMinSize(minWidth = 60.dp, minHeight = 44.dp)
+                                            .clickable { selectedVibeModifier = vibe }
+                                            .padding(horizontal = 12.dp, vertical = 6.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(

@@ -30,7 +30,8 @@
     ]
   },
   "versioning": {
-    "current_version_code": 4,
-    "current_version_name": "1.0.1"
+    "current_version_code": 8,
+    "current_version_name": "1.1.0",
+    "whats_new": "Latest stability improvements, UI consistency fixes, and new export/sharing functionality."
   }
 }
