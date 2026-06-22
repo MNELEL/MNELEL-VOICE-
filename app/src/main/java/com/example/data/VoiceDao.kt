@@ -45,4 +45,19 @@ interface VoiceDao {
 
     @Query("DELETE FROM voice_generation_results")
     suspend fun deleteAllGenerationResults()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDiagnosisReport(report: SpeechDiagnosisReport): Long
+
+    @Query("SELECT * FROM speech_diagnosis_reports ORDER BY date DESC")
+    fun getAllDiagnosisReports(): Flow<List<SpeechDiagnosisReport>>
+
+    @Query("SELECT * FROM speech_diagnosis_reports WHERE profileId = :profileId ORDER BY date DESC")
+    fun getReportsForProfile(profileId: Int): Flow<List<SpeechDiagnosisReport>>
+
+    @Query("DELETE FROM speech_diagnosis_reports WHERE id = :id")
+    suspend fun deleteDiagnosisReportById(id: Int)
+
+    @Query("DELETE FROM speech_diagnosis_reports")
+    suspend fun deleteAllDiagnosisReports()
 }

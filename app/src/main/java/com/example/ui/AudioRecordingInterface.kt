@@ -23,6 +23,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -371,6 +374,7 @@ private fun RecordingWaveform(
             contentAlignment = Alignment.Center
         ) {
             val primaryColor = MaterialTheme.colorScheme.primary
+            val secondaryColor = MaterialTheme.colorScheme.secondary
             val onSurfaceColor = MaterialTheme.colorScheme.onSurface
             Canvas(
                 modifier = Modifier
@@ -379,8 +383,21 @@ private fun RecordingWaveform(
             ) {
                 val canvasWidth = size.width
                 val canvasHeight = size.height
-                val barWidth = 4.dp.toPx()
-                val gap = 3.dp.toPx()
+
+                // Draw D3-style coordinate grids (dB thresholds)
+                val dbLevels = listOf(0.15f, 0.5f, 0.85f)
+                dbLevels.forEach { fraction ->
+                    val y = canvasHeight * fraction
+                    drawLine(
+                        color = onSurfaceColor.copy(alpha = 0.07f),
+                        start = Offset(0f, y),
+                        end = Offset(canvasWidth, y),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                }
+
+                val barWidth = 3.dp.toPx()
+                val gap = 2.dp.toPx()
                 val step = barWidth + gap
                 val maxBars = (canvasWidth / step).toInt()
 
@@ -403,12 +420,24 @@ private fun RecordingWaveform(
                 val centerY = canvasHeight / 2f
                 val startX = (canvasWidth - (displayList.size * step)) / 2f
 
+                val upperPath = Path()
+                val lowerPath = Path()
+
                 displayList.forEachIndexed { index, amp ->
                     val x = startX + index * step
                     val maxClipHeight = canvasHeight * 0.85f
                     val barHeight = (amp * maxClipHeight).coerceIn(4.dp.toPx(), maxClipHeight)
                     val top = centerY - barHeight / 2f
-                    
+                    val bottom = centerY + barHeight / 2f
+
+                    if (index == 0) {
+                        upperPath.moveTo(x, top)
+                        lowerPath.moveTo(x, bottom)
+                    } else {
+                        upperPath.lineTo(x, top)
+                        lowerPath.lineTo(x, bottom)
+                    }
+
                     val barColor = if (isRecording) {
                         if (isPaused) {
                             Color(0xFFF59E0B)
@@ -428,6 +457,20 @@ private fun RecordingWaveform(
                         topLeft = Offset(x, top),
                         size = Size(barWidth, barHeight),
                         cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
+                    )
+                }
+
+                // Stroke D3 outer contour
+                if (displayList.isNotEmpty()) {
+                    drawPath(
+                        path = upperPath,
+                        color = secondaryColor.copy(alpha = 0.4f),
+                        style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
+                    )
+                    drawPath(
+                        path = lowerPath,
+                        color = secondaryColor.copy(alpha = 0.4f),
+                        style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
                     )
                 }
             }

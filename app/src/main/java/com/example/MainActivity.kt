@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -90,6 +91,9 @@ fun VoiceClonerAppScreen(
     val templates by viewModel.allStyleTemplates.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
+    val prefs = context.getSharedPreferences("voice_app_prefs", android.content.Context.MODE_PRIVATE)
+    var showRecordingTutorial by remember { mutableStateOf(prefs.getBoolean("show_recording_tutorial_v1", true)) }
+
     val isPlayingRecorded by viewModel.isPlayingRecorded.collectAsStateWithLifecycle()
     var isUploadMode by remember { mutableStateOf(false) }
     var showImportDialog by remember { mutableStateOf(false) }
@@ -170,6 +174,58 @@ fun VoiceClonerAppScreen(
             modifier = modifier
         )
         return
+    }
+
+    if (showRecordingTutorial) {
+        AlertDialog(
+            onDismissRequest = { 
+                showRecordingTutorial = false
+                prefs.edit().putBoolean("show_recording_tutorial_v1", false).apply()
+            },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(imageVector = Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Text("איך להקליט דגימה מנצחת? 🎙️", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(
+                        "כדי שהשיבוט והניתוח הקולי יהיו מדוייקים ככל האפשר, אנא הקפידו על הכללים הבאים:", 
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
+                    val instructions = listOf(
+                        "הקליטו בסביבה שקטה וללא רעשי רקע.",
+                        "דברו בקול ברור וטבעי, ללא מבטא מאולץ.",
+                        "הקפידו על הקלטה של 10 שניות לפחות.",
+                        "קראו משפטים שלמים ושמרו על טון קול יציב."
+                    )
+                    
+                    instructions.forEach { instruction ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(20.dp))
+                            Text(instruction, fontSize = 14.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { 
+                        showRecordingTutorial = false 
+                        prefs.edit().putBoolean("show_recording_tutorial_v1", false).apply()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("הבנתי, אפשר להתחיל ✨", fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.padding(vertical = 4.dp))
+                }
+            },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = MaterialTheme.colorScheme.surface
+        )
     }
 
     Column(
@@ -957,7 +1013,7 @@ fun VoiceClonerAppScreen(
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text("מנתח תדרי קול [AI]...", fontWeight = FontWeight.Bold)
                                     } else {
-                                        Icon(imageVector = Icons.Default.Send, contentDescription = null)
+                                        Icon(imageVector = Icons.AutoMirrored.Filled.Send, contentDescription = null)
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text("לחץ לניתוח קול ושכפול [AI]", fontWeight = FontWeight.Bold)
                                     }
@@ -1893,7 +1949,7 @@ fun VoiceProfileCard(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("מייצר קול...", fontSize = 14.sp)
                             } else {
-                                Icon(imageVector = Icons.Default.Send, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(imageVector = Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("דיבור AI (שרת)", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                             }
@@ -1993,6 +2049,24 @@ fun VoiceProfileCard(
                                         Icon(
                                             imageVector = Icons.Default.Refresh,
                                             contentDescription = "הזן לשיבוט מחדש",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+
+                                    // Share Button
+                                    IconButton(
+                                        onClick = {
+                                            shareAudioFile(
+                                                context = context,
+                                                sourceFile = java.io.File(result.audioPath)
+                                            )
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Share,
+                                            contentDescription = "שתף שמע",
                                             tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(18.dp)
                                         )
@@ -2134,7 +2208,8 @@ fun SoundWaveVisualizer(
 val SoftWhite = Color(0xFFE5E7EB)
 
 @Composable
-fun VoiceDashboardSection(profile: VoiceProfile) {
+fun VoiceDashboardSection(profile: VoiceProfile, viewModel: com.example.VoiceClonerViewModel? = null) {
+    val activeViewModel: com.example.VoiceClonerViewModel = viewModel ?: androidx.lifecycle.viewmodel.compose.viewModel()
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -2245,7 +2320,7 @@ fun VoiceDashboardSection(profile: VoiceProfile) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            com.example.ui.VoiceAnalysisDashboardUI(profile = profile)
+            com.example.ui.VoiceAnalysisDashboardUI(profile = profile, viewModel = activeViewModel)
         }
     }
 }
@@ -2355,6 +2430,30 @@ fun downloadFileToDevice(
     } catch (e: Exception) {
         android.util.Log.e("Download", "Failed to download", e)
         onResult(false, "כשל הורדה: ${e.message}")
+    }
+}
+
+fun shareAudioFile(context: android.content.Context, sourceFile: java.io.File) {
+    if (!sourceFile.exists()) {
+        android.widget.Toast.makeText(context, "קובץ השמע אינו זמין לשיתוף", android.widget.Toast.LENGTH_SHORT).show()
+        return
+    }
+    
+    try {
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.provider",
+            sourceFile
+        )
+        val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "audio/mpeg"
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(android.content.Intent.createChooser(shareIntent, "שתף קובץ אודיו דרך..."))
+    } catch (e: Exception) {
+        android.util.Log.e("Share", "Failed to share file", e)
+        android.widget.Toast.makeText(context, "שגיאה בשיתוף הקובץ", android.widget.Toast.LENGTH_SHORT).show()
     }
 }
 

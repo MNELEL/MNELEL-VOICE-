@@ -1,10 +1,14 @@
 package com.example.ui
 
+import android.content.Context
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -15,6 +19,8 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
@@ -27,12 +33,14 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -44,10 +52,11 @@ import kotlin.math.sin
 @Composable
 fun VoiceAnalysisDashboardUI(
     profile: VoiceProfile,
+    viewModel: com.example.VoiceClonerViewModel? = null,
     modifier: Modifier = Modifier
 ) {
     var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("דיוק פונטי והגייה", "ניתוח תדרי קול (Pitch)", "רעשי רקע וסביבה (Noise)")
+    val tabs = listOf("דיוק פונטי", "ניתוח תדרים (Pitch)", "רעשי רקע", "אבחון אישיות ודיבור 🧠")
 
     Card(
         modifier = modifier
@@ -123,7 +132,7 @@ fun VoiceAnalysisDashboardUI(
                         text = {
                             Text(
                                 text = title,
-                                fontSize = 14.sp,
+                                fontSize = 11.sp,
                                 fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Medium,
                                 color = if (selectedTab == index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                             )
@@ -143,6 +152,7 @@ fun VoiceAnalysisDashboardUI(
                     0 -> PhoneticAccuracyTabContent(profile = profile)
                     1 -> PitchFrequencyTabContent(profile = profile)
                     2 -> NoiseLevelsTabContent(profile = profile)
+                    3 -> PsychoPedagogicalDiagnosisTabContent(profile = profile, viewModel = viewModel)
                 }
             }
         }
@@ -1032,5 +1042,400 @@ fun BulletText(text: String) {
     ) {
         Text(text = "•", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
         Text(text = text, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
+    }
+}
+
+@Composable
+fun PsychoPedagogicalDiagnosisTabContent(
+    profile: VoiceProfile,
+    viewModel: com.example.VoiceClonerViewModel?,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val aiReport = viewModel?.aiDiagnosisReport?.collectAsState()?.value
+    val isGenerating = viewModel?.isGeneratingDiagnosis?.collectAsState()?.value ?: false
+    val errorMsg = viewModel?.diagnosisError?.collectAsState()?.value
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Text(
+            text = "אבחון פסיכו-רטורי ואקוסטי על פי סגנון הדיבור 🧠",
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.onSurface
+        )
+
+        Text(
+            text = "סגנון הדיבור של אדם משמש מראה לרבדים עמוקים באישיותו, במצבו הקוגניטיבי ובאיכות ההנהגה החינוכית שלו. להלן ממצאים פסיכו-אקוסטיים משבועים מתוך קול קולו של ${profile.name}:",
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+            lineHeight = 20.sp
+        )
+
+        // Segment 1: Personality & Leadership style
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)),
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+        ) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "👤 אפיון תקשורתי וסגנון מנהיגות פדגוגית",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                val leadershipDesc = if (profile.clarityScore >= 80) {
+                    "סמכותי, כריזמטי וסוחף מאוד. הדובר שומר על חיתוך הברתי מדויק ודיקציה חדה, דבר המשרה אוטוריטה מקצועית ומגביר את רמת הקשב והמשמעת בקרב קהל התלמידים מבוגרים וצעירים כאחד."
+                } else if (profile.clarityScore >= 60) {
+                    "סגנון שיחתי, נעים, משתף ומקרב. הדובר משדר חום פנימי ואמפתיה גבוהה, המשרה ביטחון ברקע החינוכי ותומך היטב בתהליכים פדגוגיים ארוכי טווח ובקואוצ'ינג פסיכולוגי אישי."
+                } else {
+                    "סגנון קולי שקט, מתון ואינטימי. הדובר מפגין איפוק רטורי המזמין שיתוף פעולה והקשבה חרישית, מועיל בעיקר במרחבי הנחיה פרטנית ועשייה רגשית מתונה."
+                }
+                
+                Text(
+                    text = leadershipDesc,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    lineHeight = 18.sp
+                )
+            }
+        }
+
+        // Segment 2: Fatigue Indicator & Emotional temperament
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Cognitive Fatigue & Focus Score
+            Card(
+                modifier = Modifier.weight(1f),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "⚙️ מדד קשב ועייפות",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Gray,
+                        modifier = Modifier.align(Alignment.Start)
+                    )
+
+                    // Calculate fatigue (longer/irregular pauses increase fatigue estimation)
+                    val fatigueScore = (100 - (profile.breathPauseScore * 0.6f + profile.intonationScore * 0.4f)).toInt().coerceIn(10, 95)
+                    
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(64.dp)) {
+                        CircularProgressIndicator(
+                            progress = { fatigueScore.toFloat() / 100f },
+                            color = if (fatigueScore < 40) Color(0xFF10B981) else if (fatigueScore < 65) Color(0xFFF59E0B) else Color(0xFFEF4444),
+                            strokeWidth = 6.dp,
+                            trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("$fatigueScore%", fontSize = 14.sp, fontWeight = FontWeight.Black)
+                            Text("עייפות", fontSize = 8.sp, color = Color.Gray)
+                        }
+                    }
+
+                    Text(
+                        text = if (fatigueScore < 40) "ריכוז קול גבוה 🟢" else if (fatigueScore < 65) "עייפות פונטית מתונה" else "עייפות קוגניטיבית גבוהה ⚠️",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (fatigueScore < 40) Color(0xFF137333) else if (fatigueScore < 65) Color(0xFFB06000) else Color(0xFFC5221F),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+
+            // Emotional Temperament
+            Card(
+                modifier = Modifier.weight(1.2f),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "🎭 מזג ומצב רוח קבוע",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Gray
+                    )
+
+                    val moodType = if (profile.intonationScore >= 75) {
+                        "נמרץ ומלא התלהבות"
+                    } else if (profile.intonationScore >= 50) {
+                        "יציב, מאוזן ורגוע"
+                    } else {
+                        "מאופק, קונפורמי ותמציתי"
+                    }
+
+                    Text(
+                        text = moodType,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    val moodDetails = if (profile.intonationScore >= 75) {
+                        "הקול נעדר מונוטוניות, עם גיוון טונאלי עשיר המעיד על פתיחות חברתית מרבית ורצון עז להשפיע ולהלהיב."
+                    } else if (profile.intonationScore >= 50) {
+                        "מנעד קולי בריא המעיד על חוסן נפשי גבוה, שליטה מעולה בלחצים ויכולת הכלה פדגוגית יוצאת דופן."
+                    } else {
+                        "קול מונוטוני וקבוע יחסית המעיד על מיקוד לוגי בלעדי, רצינות תהומית וחתירה לשליטה מובנית במידע הורה."
+                    }
+
+                    Text(
+                        text = moodDetails,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        lineHeight = 14.sp
+                    )
+                }
+            }
+        }
+
+        // Segment 3: Reflective improvements suggestions
+        Text("🛠️ המלצות מעשיות ותובנות רטוריות לשיפור:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+        Column(
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(start = 4.dp)
+        ) {
+            if (profile.clarityScore < 70) {
+                BulletText("בצע תרגילי חימום קוליים ושפתיים (כגון טרמולו שפתיים) לקניית היגוי משוחרר ודיקציה פונטית גבוהה יותר.")
+            } else {
+                BulletText("איכות השיח שלך מצוינת! שמור על טון גרון פתוח ומרווחים שווים כדי למנוע מאמץ קולי לאורך שעות הדרכה ממושכות.")
+            }
+
+            if (profile.breathPauseScore < 65) {
+                BulletText("הקפד על נשימה סרעפתית מסודרת. המערכת זיהתה עצירות מרובות באמצע משפטים, המעידות על חוסר אוויר ותחושת לחץ סמויה במהלך הדיבור.")
+            } else {
+                BulletText("סנכרון נשימה נפלא - אתה משאיר הפסקות קלות ומדודות שמקלות מאוד על עיבוד המידע אצל קהל התלמידים.")
+            }
+
+            if (profile.frequencyHz > 200) {
+                BulletText("הקול שלך ניחן בתדרים גבוהים ומרובי מלודיה. מומלץ לעיתים בשיעורי ריכוז ומשמעת להנמיך במתכוון את הטון כדי להגדיל תשומת לב של התלמידים.")
+            } else if (profile.frequencyHz < 120) {
+                BulletText("תדר קולי נמוך, סמכותי ובעל תהודה גברית עשירה. מומלץ לחייך חיוך קל תוך כדי דיבור כדי להוסיף רעננות ורכות לקול, בפרט בהוראה לגיל הרך.")
+            }
+        }
+
+        // Segment 4: Interactive AI report triggering
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)),
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+        ) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "🤖 רוצה אבחון פסיכו-פדגוגי מעמיק ומקיף מלווה בניתוח מבוסס AI?",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center
+                )
+
+                Text(
+                    text = "ניתוח מורכב של הקווים האקוסטיים של קולך באמצעות מודל Gemini יחולל עבורך דוח קליני ורפלקטיבי מלא אודות סגנון התקשורת החינוכי שלך.",
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    lineHeight = 16.sp
+                )
+
+                if (viewModel != null) {
+                    if (isGenerating) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            CircularProgressIndicator(strokeWidth = 2.5.dp, modifier = Modifier.size(24.dp))
+                            Text("מפענח טקסטורות אקוסטיות ומנסח אבחון רפלקטיבי מותאם אישית...", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        }
+                    } else if (aiReport != null) {
+                        // Display generated report
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 240.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.background)
+                                .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                                .verticalScroll(rememberScrollState())
+                                .padding(12.dp)
+                        ) {
+                            Text(
+                                text = aiReport,
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                lineHeight = 18.sp
+                            )
+                        }
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Button(
+                                onClick = {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    val clip = android.content.ClipData.newPlainText("Vocal Diagnosis Report", aiReport)
+                                    clipboard.setPrimaryClip(clip)
+                                    android.widget.Toast.makeText(context, "דוח אבחון קולי פסיכו-פדגוגי הועתק ללוח! 📋", android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f).height(40.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("העתק אבחון", fontSize = 12.sp)
+                            }
+                            
+                            Button(
+                                onClick = {
+                                    viewModel.saveDiagnosisReport(profile, "אבחון פסיכו-פדגוגי - אקוסטי", aiReport)
+                                    android.widget.Toast.makeText(context, "הדוח נשמר בהיסטוריה ✅", android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)), // Emerald Green
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f).height(40.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.Star, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("שמור דוח", fontSize = 12.sp)
+                            }
+
+                            OutlinedButton(
+                                onClick = { viewModel.clearDiagnosisReport() },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f).height(40.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("אפס דוח", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    } else {
+                        Button(
+                            onClick = { viewModel.generateVoiceDiagnosisReport(profile) },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                            modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 44.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Face, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("חולל דוח אבחון מעמיק בבינה מלאכותית 🚀", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    errorMsg?.let { err ->
+                        Text(text = err, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                    }
+                } else {
+                    Text("אבחון AI אינו זמין במסך זה (חסר ViewModel)", color = Color.Gray, fontSize = 11.sp)
+                }
+            }
+        }
+        
+        // Show Saved Reports History
+        if (viewModel != null) {
+            val savedReports = viewModel.allDiagnosisReports.collectAsState().value.filter { it.profileId == profile.id }
+            if (savedReports.isNotEmpty()) {
+                Text(
+                    text = "📂 היסטוריית אבחונים שמורים:",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                
+                savedReports.forEach { report ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = report.labelText,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                TextButton(
+                                    onClick = { viewModel.deleteDiagnosisReport(report.id) },
+                                    contentPadding = PaddingValues(0.dp),
+                                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 1.dp).height(24.dp)
+                                ) {
+                                    Text("מחק דוח", fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                            
+                            val df = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault())
+                            Text("נשמר ב: ${df.format(java.util.Date(report.date))}", fontSize = 11.sp, color = Color.Gray)
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(modifier = Modifier.background(Color(0xFFEF4444).copy(alpha=0.1f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                                    Text("עייפות: ${report.fatigueScore}%", fontSize = 10.sp, color = Color(0xFFEF4444))
+                                }
+                                Box(modifier = Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha=0.1f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                                    Text(report.emotionalTemperament, fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                            
+                            var isExpanded by remember { mutableStateOf(false) }
+                            if (isExpanded) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(MaterialTheme.colorScheme.background, RoundedCornerShape(8.dp))
+                                        .padding(10.dp)
+                                ) {
+                                    Text(
+                                        text = report.aiGeneratedReport,
+                                        fontSize = 12.sp,
+                                        lineHeight = 16.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                            
+                            TextButton(
+                                onClick = { isExpanded = !isExpanded },
+                                modifier = Modifier.fillMaxWidth().height(32.dp),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Text(if (isExpanded) "הסתר תוכן ⌃" else "הצג תוכן מלא ⌄", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

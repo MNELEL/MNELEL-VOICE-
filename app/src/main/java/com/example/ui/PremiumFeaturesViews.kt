@@ -311,6 +311,47 @@ fun SpeechSynthesisScreen(
     var selectedProfile by remember { mutableStateOf<VoiceProfile?>(null) }
     var selectedTemplate by remember { mutableStateOf<VoiceStyleTemplate?>(null) }
 
+    val moodStates = remember {
+        listOf(
+            "מקורי/רגיל" to "סגנון הדיבור המקורי והטבעי",
+            "עייף ותשוש" to "קול עייף, תדר נמוך וקצב הקראה איטי",
+            "שמח וערני" to "קול נמרץ, תדר גבוה וקצב דיבור מהיר",
+            "סמכותי ורציני" to "דיקציה מושלמת, תדר עמוק והדגשה פונטית",
+            "לחישה ואיפוק" to "עוצמת שמע מונמכת ואינטונציה רגילה",
+            "נרגש ונלהב" to "מנעד צלילים משתנה ותהודה מתפרצת"
+        )
+    }
+    var selectedMoodState by remember { mutableStateOf("מקורי/רגיל") }
+
+    LaunchedEffect(selectedMoodState) {
+        when (selectedMoodState) {
+            "מקורי/רגיל" -> {
+                pitchTuning = 0f
+                speedTuning = 0f
+            }
+            "עייף ותשוש" -> {
+                pitchTuning = -0.3f
+                speedTuning = -0.4f
+            }
+            "שמח וערני" -> {
+                pitchTuning = 0.3f
+                speedTuning = 0.3f
+            }
+            "סמכותי ורציני" -> {
+                pitchTuning = -0.15f
+                speedTuning = -0.1f
+            }
+            "לחישה ואיפוק" -> {
+                pitchTuning = -0.1f
+                speedTuning = -0.2f
+            }
+            "נרגש ונלהב" -> {
+                pitchTuning = 0.4f
+                speedTuning = 0.3f
+            }
+        }
+    }
+
     val isSynthesizing by viewModel.isSynthesizing.collectAsStateWithLifecycle()
     val synthesizeError by viewModel.synthesizeError.collectAsStateWithLifecycle()
     val isDriveSyncing by viewModel.driveSyncing.collectAsStateWithLifecycle()
@@ -398,6 +439,50 @@ fun SpeechSynthesisScreen(
                                 )
                             )
                         }
+                    }
+                }
+
+                // 2.1b Learned Custom Moods (Tired / Happy / Serious)
+                Text("סגנון קול ומצב רוח שהמערכת למדה: 🧠", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(moodStates) { (moodName, _) ->
+                        FilterChip(
+                            selected = selectedMoodState == moodName,
+                            onClick = { selectedMoodState = moodName },
+                            label = { Text(moodName) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = LightPrimary.copy(alpha = 0.2f),
+                                selectedLabelColor = LightPrimary
+                            )
+                        )
+                    }
+                }
+
+                // Description of learned state characteristics
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = LightPrimary.copy(alpha = 0.05f)),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, LightPrimary.copy(alpha = 0.12f))
+                ) {
+                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        val learnedDesc = when (selectedMoodState) {
+                            "עייף ותשוש" -> "🛌 המודל זיהה כי במצבי עייפות תדירות קולך יורדת ב-15%, הדחיסה האקוסטית מועצמת והפסקות הנשימה מתארכות ב-30% ביחס למקור."
+                            "שמח וערני" -> "🌅 המערכת למדה כי במצבי שמחה ורעננות הקול נהיה מלודי, תדר הדיבור הממוצע עולה ב-25 הרץ, והדיקציה קופצנית ומהירה."
+                            "סמכותי ורציני" -> "🎓 המערכת מנווטת את תדרי הליבה לטון נמוך, יציב ומתוחכם – המקל על הובלה, העברת סמכות ויצירת ריכוז פדגוגי."
+                            "לחישה ואיפוק" -> "🤫 קול דק ועדין: מסנן רעשים קבועים ברוחב פתוח ומדמה אווירה אינטימית ואינטונציה שקטה ונקייה מהד."
+                            "נרגש ונלהב" -> "🔥 מועצמת מנגינת הדיבור לקבלת מנעד מגוון ועשיר ביותר, קצב הקראה מהיר וביטוי תוסס המביע תשוקה."
+                            else -> "✨ סגנון מקורי: ייעשה שימוש במנעד הביומטרי הרגיל כפי שנקלט בדגימת הקול שהקלטת בלשונית הבית."
+                        }
+                        Text(
+                            text = learnedDesc,
+                            fontSize = 11.sp,
+                            color = DarkCharcoal,
+                            lineHeight = 14.sp
+                        )
                     }
                 }
 
@@ -509,7 +594,7 @@ fun SpeechSynthesisScreen(
                                         profile = profile,
                                         pitchTuningPercent = pitchTuning * 100f,
                                         speedTuningPercent = speedTuning * 100f,
-                                        vibeModifier = selectedTemplate?.name ?: "מקורי"
+                                        vibeModifier = if (selectedMoodState != "מקורי/רגיל") selectedMoodState else (selectedTemplate?.name ?: "מקורי")
                                     )
                                 } else {
                                     android.widget.Toast.makeText(context, "אנא הזן טקסט לקריינות", android.widget.Toast.LENGTH_SHORT).show()

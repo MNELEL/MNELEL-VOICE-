@@ -9,6 +9,7 @@ import com.example.data.AppDatabase
 import com.example.data.VoiceProfile
 import com.example.data.VoiceGenerationResult
 import com.example.data.VoiceStyleTemplate
+import com.example.data.SpeechDiagnosisReport
 import com.example.utils.AudioHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -131,6 +132,28 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
 
     private val _isPlayerMuted = MutableStateFlow(false)
     val isPlayerMuted: StateFlow<Boolean> = _isPlayerMuted.asStateFlow()
+
+    // Speech Diagnosis AI States
+    private val _aiDiagnosisReport = MutableStateFlow<String?>(null)
+    val aiDiagnosisReport: StateFlow<String?> = _aiDiagnosisReport.asStateFlow()
+
+    private val _isGeneratingDiagnosis = MutableStateFlow(false)
+    val isGeneratingDiagnosis: StateFlow<Boolean> = _isGeneratingDiagnosis.asStateFlow()
+
+    private val _diagnosisError = MutableStateFlow<String?>(null)
+    val diagnosisError: StateFlow<String?> = _diagnosisError.asStateFlow()
+
+    val allDiagnosisReports: StateFlow<List<SpeechDiagnosisReport>> = voiceDao.getAllDiagnosisReports()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    fun clearDiagnosisReport() {
+        _aiDiagnosisReport.value = null
+        _diagnosisError.value = null
+    }
 
     fun setPlaybackSpeed(speed: Float) {
         _playbackSpeed.value = speed
@@ -1558,6 +1581,124 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                 withContext(Dispatchers.Main) {
                     onComplete(false, "כשל ביבוא פרופיל מקוד שיתוף: ${e.message}")
                 }
+            }
+        }
+    }
+
+    fun generateVoiceDiagnosisReport(profile: VoiceProfile) {
+        _isGeneratingDiagnosis.value = true
+        _diagnosisError.value = null
+        _aiDiagnosisReport.value = null
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val apiKey = getEffectiveApiKey()
+                if (apiKey.isEmpty()) {
+                    throw IllegalStateException("אנא תגדיר מפתח Gemini API תקין בהגדרות כדי לבצע אבחון.")
+                }
+
+                val prompt = """
+                    SYSTEM COMMAND: Perform a highly detailed, professional clinical and psycho-pedagogical speech diagnosis report in HEBREW.
+                    We recorded a voice sample of a speaker named '${profile.name}' (Gender: ${profile.gender}).
+                    
+                    Acoustic and biometrical metrics analyzed from the voice recording sample:
+                    - Average Pitch Frequency: ${profile.frequencyHz} Hz (Corresponds to ${profile.pitch})
+                    - Pronunciation Accuracy: ${profile.pronunciationClarity}/100
+                    - Vocal Clarity (Articulation / Phonetics): ${profile.clarityScore}/100
+                    - Intonation Modulation (Expressiveness): ${profile.intonationScore}/100
+                    - Breath Pauses & Rhythm: ${profile.breathPauseScore}/100
+                    - Background Noise & Distortion Level: ${profile.distortionLevel}/100
+
+                    Write an deep clinical psycho-acoustic report in Hebrew answering: "What can be learned about this person based on their speech style?"
+                    Format with these precise sections:
+                    1. 🎙️ מבוא קולי ואקוסטי (Acoustic Assessment)
+                    2. 👤 אבחון סגנון אישיות ותקשורת (Personality and Communication Diagnosis - what can be learned about their social traits/temperament)
+                    3. 👥 מנהיגות וסגנון פדגוגי (Leadership & Classroom Presence - how they capture pupils, their authority, engagement tone)
+                    4. 🧠 עייפות קוגניטיבית, ריכוז ומצב נפשי (Cognitive Fatigue, Focus, and Anxiety states - e.g., mapping breath pause score, clarity, and pitch stability)
+                    5. 🛠️ המלצות מעשיות ותובנות רטוריות (Practical Rhetorical Coaching & Speech Exercises)
+
+                    Format the response beautifully in clean Hebrew Markdown. Use bullet points and bold headers. Do not output JSON. Make the analysis sound incredibly accurate, professional, empathetic, and scientifically backed.
+                """.trimIndent()
+
+                val requestJson = JSONObject().apply {
+                    put("contents", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("parts", JSONArray().apply {
+                                put(JSONObject().apply {
+                                    put("text", prompt)
+                                })
+                            })
+                        })
+                    })
+                }
+
+                val mediaType = "application/json; charset=utf-8".toMediaType()
+                val requestBody = requestJson.toString().toRequestBody(mediaType)
+                val request = Request.Builder()
+                    .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${"$"}apiKey")
+                    .post(requestBody)
+                    .build()
+
+                val response = okHttpClient.newCall(request).execute()
+                if (!response.isSuccessful) {
+                    throw IllegalStateException("כשל בתקשורת עם שרת האבחון: ${"$"}{response.code}")
+                }
+
+                val responseBodyStr = response.body?.string() ?: throw IllegalStateException("תגובה ריקה")
+                val responseObj = JSONObject(responseBodyStr)
+                val candidates = responseObj.getJSONArray("candidates")
+                val parts = candidates.getJSONObject(0).getJSONObject("content").getJSONArray("parts")
+                val textResponse = parts.getJSONObject(0).getString("text")
+
+                _aiDiagnosisReport.value = textResponse
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _diagnosisError.value = e.message ?: "שגיאה לא ידועה באבחון"
+            } finally {
+                _isGeneratingDiagnosis.value = false
+            }
+        }
+    }
+
+    fun saveDiagnosisReport(profile: VoiceProfile, labelText: String, aiReportText: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val fatigueScore = (100 - (profile.breathPauseScore * 0.6f + profile.intonationScore * 0.4f)).toInt().coerceIn(10, 95)
+                val moodType = if (profile.intonationScore >= 75) {
+                    "נמרץ ומלא התלהבות"
+                } else if (profile.intonationScore >= 50) {
+                    "יציב, מאוזן ורגוע"
+                } else {
+                    "מאופק, קונפורמי ותמציתי"
+                }
+
+                val report = SpeechDiagnosisReport(
+                    profileId = profile.id,
+                    profileName = profile.name,
+                    pitchHz = profile.frequencyHz,
+                    clarityScore = profile.clarityScore,
+                    pronunciationClarity = profile.pronunciationClarity,
+                    intonationScore = profile.intonationScore,
+                    breathPauseScore = profile.breathPauseScore,
+                    distortionLevel = profile.distortionLevel,
+                    fatigueScore = fatigueScore,
+                    emotionalTemperament = moodType,
+                    aiGeneratedReport = aiReportText,
+                    labelText = labelText.ifBlank { "אבחון סגנון דיבור - ${profile.name}" }
+                )
+                voiceDao.insertDiagnosisReport(report)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun deleteDiagnosisReport(id: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                voiceDao.deleteDiagnosisReportById(id)
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     }
