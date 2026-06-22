@@ -1199,7 +1199,8 @@ fun VoiceClonerAppScreen(
                                 Button(
                                     onClick = {
                                         viewModel.exportAllProfilesToBackupFile(context) { success, msg ->
-                                            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                                            val finalMsg = if (success) "הייצוא הושלם בהצלחה! הקובץ נשמר בתיקיית ההורדות 📥" else msg
+                                            android.widget.Toast.makeText(context, finalMsg, android.widget.Toast.LENGTH_LONG).show()
                                         }
                                     },
                                     modifier = Modifier.weight(1f),
@@ -1313,7 +1314,7 @@ fun VoiceClonerAppScreen(
                                 val clipboardManager = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                 val clip = android.content.ClipData.newPlainText("Voice Signature", json)
                                 clipboardManager.setPrimaryClip(clip)
-                                android.widget.Toast.makeText(context, "חתימת הקול '${profile.name}' הועתקה ללוח הזיכרון! 📋", android.widget.Toast.LENGTH_LONG).show()
+                                android.widget.Toast.makeText(context, "חתימת הקול '${profile.name}' הועתקה ללוח הזיכרון (Clipboard)! 📋", android.widget.Toast.LENGTH_LONG).show()
                             },
                             onDelete = { viewModel.deleteProfile(profile.id) },
                             recentGenerations = profileGenerations,
