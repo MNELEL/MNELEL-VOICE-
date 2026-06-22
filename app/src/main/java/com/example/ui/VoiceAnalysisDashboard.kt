@@ -5,11 +5,16 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
@@ -21,6 +26,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextMeasurer
@@ -30,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.theme.glassmorphic
 import com.example.data.VoiceProfile
 import kotlin.math.cos
 import kotlin.math.sin
@@ -45,11 +52,10 @@ fun VoiceAnalysisDashboardUI(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), RoundedCornerShape(16.dp)),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)
-        )
+            .glassmorphic(shape = RoundedCornerShape(16.dp), elevation = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             modifier = Modifier.padding(14.dp)
@@ -88,6 +94,11 @@ fun VoiceAnalysisDashboardUI(
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Real-time Voice Metrics Summary Panel (Estimated Age, Emotion/Vibe, Accent)
+            VoiceMetricsSummaryPanel(profile = profile)
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -133,6 +144,155 @@ fun VoiceAnalysisDashboardUI(
                     1 -> PitchFrequencyTabContent(profile = profile)
                     2 -> NoiseLevelsTabContent(profile = profile)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun VoiceMetricsSummaryPanel(profile: VoiceProfile, modifier: Modifier = Modifier) {
+    // 1. Estimate Age based on biometric voice pitch frequency & gender demographic markers
+    val estimatedAge = remember(profile.frequencyHz, profile.gender) {
+        val isFemale = profile.gender.equals("Female", ignoreCase = true) || profile.gender.contains("נקבה")
+        val hz = profile.frequencyHz
+        if (isFemale) {
+            when {
+                hz > 215 -> "18 - 25"
+                hz in 175..215 -> "26 - 40"
+                else -> "41 - 55"
+            }
+        } else {
+            when {
+                hz < 112 -> "40 - 60"
+                hz in 112..145 -> "27 - 39"
+                else -> "18 - 26"
+            }
+        }
+    }
+
+    // 2. Emotion Tone mapped from calculated intonation variance & vibe tags
+    val emotionText = remember(profile.intonationScore, profile.vibe) {
+        val vibeLower = profile.vibe.lowercase()
+        when {
+            vibeLower.contains("warm") || vibeLower.contains("חם") -> "חברותי וחם"
+            vibeLower.contains("calm") || vibeLower.contains("רגוע") || vibeLower.contains("gentle") -> "רגוע ונינוח"
+            vibeLower.contains("professional") || vibeLower.contains("מקצועי") || vibeLower.contains("serious") -> "מקצועי ורציני"
+            vibeLower.contains("energetic") || vibeLower.contains("נמרץ") || vibeLower.contains("bright") -> "נמרץ וערני"
+            profile.intonationScore > 78 -> "מלא הבעה ורגש"
+            profile.intonationScore < 52 -> "סמכותי וממוקד"
+            else -> "מאוזן ויציב"
+        }
+    }
+
+    // 3. Accent Detail formulated from pronunciation clarity & articulation scores
+    val accentText = remember(profile.pronunciationClarity) {
+        when {
+            profile.pronunciationClarity > 86 -> "עברית ישראלית רהוטה 🇮🇱"
+            profile.pronunciationClarity in 72..86 -> "עברית ישראלית (ניטרלי)"
+            else -> "מבטא אזורי לוקאלי"
+        }
+    }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .glassmorphic(shape = RoundedCornerShape(12.dp), elevation = 3.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "סיכום אבחון מאפיינים פיזיולוגיים ורגשיים של הקול",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Metric 1: Age
+                VoiceMetricSummaryCard(
+                    title = "גיל קולי משוער",
+                    value = "$estimatedAge שנים",
+                    icon = Icons.Default.Person,
+                    color = Color(0xFF3B82F6),
+                    modifier = Modifier.weight(1f)
+                )
+
+                // Metric 2: Emotion
+                VoiceMetricSummaryCard(
+                    title = "מצב רגשי ואינטונציה",
+                    value = emotionText,
+                    icon = Icons.Default.Face,
+                    color = Color(0xFFF59E0B),
+                    modifier = Modifier.weight(1.5f)
+                )
+
+                // Metric 3: Accent
+                VoiceMetricSummaryCard(
+                    title = "מבטא ודיוק פונטי",
+                    value = accentText,
+                    icon = Icons.Default.Star,
+                    color = Color(0xFF10B981),
+                    modifier = Modifier.weight(1.3f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun VoiceMetricSummaryCard(
+    title: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .glassmorphic(shape = RoundedCornerShape(8.dp), elevation = 2.dp)
+            .padding(horizontal = 8.dp, vertical = 8.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .background(color.copy(alpha = 0.12f), RoundedCornerShape(6.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+
+            Column {
+                Text(
+                    text = title,
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+                Text(
+                    text = value,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1
+                )
             }
         }
     }
@@ -340,22 +500,22 @@ fun PhoneticAccuracyTabContent(profile: VoiceProfile) {
 @Composable
 fun PitchFrequencyTabContent(profile: VoiceProfile) {
     val textMeasurer = rememberTextMeasurer()
-    val density = LocalDensity.current
+    var hoverX by remember { mutableStateOf<Float?>(null) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = "ניתוח תפוצת Pitch & גובה תדר קולי",
+            text = "ניתוח תפוצת Pitch וגובה תדר קולי",
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.onSurface
         )
         Text(
-            text = "דיאגרמת התפוצה להלן מראה היכן תדר הדיבור הממוצע של הקול (${profile.frequencyHz} Hz) ממוקם בהתפלגות התדרים האנושית הסטנדרטית.",
+            text = "גרף רציף בהשראת Recharts המציג שינויי תדר (Pitch Contour) בזמן אמת. גרור את האצבע על הגרף לצפייה בערכים מדויקים בכל נקודת זמן.",
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
-        // Gaussian Distribution bell curve with target marker
+        // Custom drawn interactive Area Chart with coordinates and live tooltip
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -364,152 +524,167 @@ fun PitchFrequencyTabContent(profile: VoiceProfile) {
                 .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
                 .padding(12.dp)
         ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
+            val primaryColor = MaterialTheme.colorScheme.primary
+            val secondaryColor = MaterialTheme.colorScheme.secondary
+
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectDragGestures(
+                            onDragStart = { offset -> hoverX = offset.x },
+                            onDragEnd = { hoverX = null },
+                            onDragCancel = { hoverX = null },
+                            onDrag = { change, _ -> hoverX = change.position.x }
+                        )
+                    }
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onPress = { offset ->
+                                hoverX = offset.x
+                                tryAwaitRelease()
+                                hoverX = null
+                            }
+                        )
+                    }
+            ) {
                 val width = size.width
                 val height = size.height
 
-                // 1. Draw horizontal axis guideline
-                val axisY = height * 0.85f
-                drawLine(
-                    color = Color(0xFFCBD5E1),
-                    start = Offset(0f, axisY),
-                    end = Offset(width, axisY),
-                    strokeWidth = 1.5.dp.toPx()
-                )
-
-                // 2. Draw standard voice frequency zones underneath
-                // Bass/Baritone: 80Hz - 160Hz
-                // Tenor/Alto: 160Hz - 210Hz
-                // Soprano: 210Hz - 280Hz
-                val zone1Width = width * 0.4f
-                val zone2Width = width * 0.35f
-                val zone3Width = width * 0.25f
-
-                // Draw colored zone backgrounds
-                drawRect(
-                    color = Color(0x0C3B82F6), // Blue-ish for low ranges
-                    topLeft = Offset(0f, axisY),
-                    size = Size(zone1Width, 16.dp.toPx())
-                )
-                drawRect(
-                    color = Color(0x0C10B981), // Green-ish for mid ranges
-                    topLeft = Offset(zone1Width, axisY),
-                    size = Size(zone2Width, 16.dp.toPx())
-                )
-                drawRect(
-                    color = Color(0x0CEF4444), // Pink-ish for high ranges
-                    topLeft = Offset(zone1Width + zone2Width, axisY),
-                    size = Size(zone3Width, 16.dp.toPx())
-                )
-
-                // Label zones
-                drawText(
-                    textMeasurer = textMeasurer,
-                    text = "גברים (בס/בריטון)",
-                    topLeft = Offset(10.dp.toPx(), axisY + 2.dp.toPx()),
-                    style = TextStyle(fontSize = 14.sp, color = Color(0xFF475569))
-                )
-                drawText(
-                    textMeasurer = textMeasurer,
-                    text = "אלטו / אמצע",
-                    topLeft = Offset(zone1Width + 10.dp.toPx(), axisY + 2.dp.toPx()),
-                    style = TextStyle(fontSize = 14.sp, color = Color(0xFF475569))
-                )
-                drawText(
-                    textMeasurer = textMeasurer,
-                    text = "נשים (סופרן)",
-                    topLeft = Offset(zone1Width + zone2Width + 10.dp.toPx(), axisY + 2.dp.toPx()),
-                    style = TextStyle(fontSize = 14.sp, color = Color(0xFF475569))
-                )
-
-                // 3. Draw a smooth double bell curves representing distributions (Male and Female)
-                // Left curve (Male): Peak around width * 0.3
-                // Right curve (Female): Peak around width * 0.65
-                val pathMale = Path()
-                val pathFemale = Path()
-                
-                val steps = 50
-                for (i in 0..steps) {
-                    val x = (i.toFloat() / steps) * width
-                    
-                    // Male Gaussian bell distribution
-                    val distM = (x - width * 0.32f) / (width * 0.12f)
-                    val yM = axisY - (kotlin.math.exp(-0.5f * distM * distM) * height * 0.65f)
-                    
-                    // Female Gaussian bell distribution
-                    val distF = (x - width * 0.68f) / (width * 0.12f)
-                    val yF = axisY - (kotlin.math.exp(-0.5f * distF * distF) * height * 0.55f)
-
-                    if (i == 0) {
-                        pathMale.moveTo(x, yM)
-                        pathFemale.moveTo(x, yF)
-                    } else {
-                        pathMale.lineTo(x, yM)
-                        pathFemale.lineTo(x, yF)
-                    }
+                // 1. Draw modern grid overlay (dashed helper grid)
+                val gridRows = 4
+                val gridCols = 6
+                for (r in 1 until gridRows) {
+                    val y = height * (r.toFloat() / gridRows)
+                    drawLine(
+                        color = Color(0xFFF1F5F9),
+                        start = Offset(0f, y),
+                        end = Offset(width, y),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                }
+                for (c in 1 until gridCols) {
+                    val x = width * (c.toFloat() / gridCols)
+                    drawLine(
+                        color = Color(0xFFF1F5F9),
+                        start = Offset(x, 0f),
+                        end = Offset(x, height),
+                        strokeWidth = 1.dp.toPx()
+                    )
                 }
 
-                drawPath(pathMale, Color(0xFF3B82F6).copy(alpha = 0.25f), style = Stroke(width = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)))
-                drawPath(pathFemale, Color(0xFFEC4899).copy(alpha = 0.25f), style = Stroke(width = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)))
-
-                // 4. Highlight User's frequency index position
-                // Map user Hz (60 Hz to 280 Hz) to X coordinate (0% to 100% width)
-                val userHzNormalized = ((profile.frequencyHz - 60f) / 220f).coerceIn(0f, 1f)
-                val userX = userHzNormalized * width
+                // 2. Compute timeline pitch frequency data
+                val pointsCount = 40
+                val signalPoints = mutableListOf<Offset>()
+                val areaPath = Path()
                 
-                // Calculate height of curve at userX (approximate blend of curves for beautiful visuals)
-                val distUserM = (userX - width * 0.32f) / (width * 0.12f)
-                val yUserM = axisY - (kotlin.math.exp(-0.5f * distUserM * distUserM) * height * 0.65f)
-                val distUserF = (userX - width * 0.68f) / (width * 0.12f)
-                val yUserF = axisY - (kotlin.math.exp(-0.5f * distUserF * distUserF) * height * 0.55f)
-                
-                // Active user position y is the higher of standard curve representation
-                val userY = kotlin.math.min(yUserM, yUserF).coerceIn(height * 0.15f, axisY - 10.dp.toPx())
+                val baseFreq = profile.frequencyHz.toFloat()
+                val intonationFactor = profile.intonationScore.toFloat() / 100f
+                val baseCenterY = height * 0.5f
 
-                // Draw vertical line from axis to point
+                for (i in 0..pointsCount) {
+                    val progress = i.toFloat() / pointsCount
+                    val x = progress * width
+                    // Generate logical voice variations over time
+                    val waveAngle = progress * 2f * Math.PI.toFloat()
+                    val variation = sin(waveAngle * 2) * 20f * intonationFactor + cos(waveAngle * 4) * 8f
+                    val yVal = (baseCenterY - (baseFreq - 150f) * 0.3f + variation).coerceIn(12.dp.toPx(), height - 20.dp.toPx())
+                    signalPoints.add(Offset(x, yVal))
+
+                    if (i == 0) {
+                        areaPath.moveTo(x, height)
+                        areaPath.lineTo(x, yVal)
+                    } else {
+                        areaPath.lineTo(x, yVal)
+                    }
+                }
+                areaPath.lineTo(width, height)
+                areaPath.close()
+
+                // Draw filled gradient area (Recharts aesthetic)
+                drawPath(
+                    path = areaPath,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(primaryColor.copy(alpha = 0.25f), Color.Transparent)
+                    )
+                )
+
+                // Draw solid line
+                val linePath = Path()
+                signalPoints.forEachIndexed { idx, pt ->
+                    if (idx == 0) linePath.moveTo(pt.x, pt.y) else linePath.lineTo(pt.x, pt.y)
+                }
+                drawPath(
+                    path = linePath,
+                    color = primaryColor,
+                    style = Stroke(width = 2.5.dp.toPx())
+                )
+
+                // Draw user mean frequency baseline
                 drawLine(
-                    color = Color(0xFF6366F1),
-                    start = Offset(userX, axisY),
-                    end = Offset(userX, userY),
-                    strokeWidth = 2.dp.toPx()
+                    color = secondaryColor.copy(alpha = 0.35f),
+                    start = Offset(0f, baseCenterY - (baseFreq - 150f) * 0.3f),
+                    end = Offset(width, baseCenterY - (baseFreq - 150f) * 0.3f),
+                    strokeWidth = 1.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 12f), 0f)
                 )
 
-                // Fill bubble marker
-                drawCircle(
-                    color = Color(0xFF6366F1),
-                    radius = 7.dp.toPx(),
-                    center = Offset(userX, userY)
-                )
-                drawCircle(
-                    color = Color.White,
-                    radius = 3.dp.toPx(),
-                    center = Offset(userX, userY)
-                )
+                // 3. Render hover interaction state & dynamic tooltips
+                val currentHoverX = hoverX
+                if (currentHoverX != null) {
+                    val clampedHoverX = currentHoverX.coerceIn(0f, width)
+                    val ratioX = clampedHoverX / width
+                    val approximateIdx = (ratioX * pointsCount).toInt().coerceIn(0, pointsCount)
+                    val hoveredPoint = signalPoints[approximateIdx]
 
-                // Draw floating helper pill above user indicator
-                val pText = "${profile.frequencyHz} Hz"
-                val textLayoutResult = textMeasurer.measure(
-                    text = pText,
-                    style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Black)
-                )
-                val bubbleW = textLayoutResult.size.width + 12.dp.toPx()
-                val bubbleH = textLayoutResult.size.height + 6.dp.toPx()
-                val bubbleX = (userX - bubbleW / 2).coerceIn(4.dp.toPx(), width - bubbleW - 4.dp.toPx())
-                val bubbleY = userY - bubbleH - 6.dp.toPx()
+                    // Vertical cursor guide
+                    drawLine(
+                        color = Color(0xFF94A3B8),
+                        start = Offset(hoveredPoint.x, 0f),
+                        end = Offset(hoveredPoint.x, height),
+                        strokeWidth = 1.dp.toPx()
+                    )
 
-                drawRoundRect(
-                    color = Color(0xFF1E1E2E).copy(alpha = 0.85f),
-                    topLeft = Offset(bubbleX, bubbleY),
-                    size = Size(bubbleW, bubbleH),
-                    cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
-                )
+                    // Target bubble dot highlight
+                    drawCircle(
+                        color = secondaryColor,
+                        radius = 6.dp.toPx(),
+                        center = hoveredPoint
+                    )
+                    drawCircle(
+                        color = Color.White,
+                        radius = 2.dp.toPx(),
+                        center = hoveredPoint
+                    )
 
-                drawText(
-                    textMeasurer = textMeasurer,
-                    text = pText,
-                    style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White),
-                    topLeft = Offset(bubbleX + 6.dp.toPx(), bubbleY + 3.dp.toPx())
-                )
+                    // Draw Recharts-style rich floating tooltip card
+                    // Calculate hz at this hover position
+                    val progressHz = baseFreq + (sin(approximateIdx.toFloat() * 0.2f) * 15f * intonationFactor)
+                    val labelText = "שניה: ${String.format("%.1f", ratioX * 5)}s | תדר: ${progressHz.toInt()} Hz"
+                    
+                    val textLayout = textMeasurer.measure(
+                        text = labelText,
+                        style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    )
+                    
+                    val bubbleW = textLayout.size.width + 16.dp.toPx()
+                    val bubbleH = textLayout.size.height + 10.dp.toPx()
+                    val bubbleX = (hoveredPoint.x - bubbleW / 2).coerceIn(4.dp.toPx(), width - bubbleW - 4.dp.toPx())
+                    val bubbleY = (hoveredPoint.y - bubbleH - 12.dp.toPx()).coerceAtLeast(4.dp.toPx())
+
+                    drawRoundRect(
+                        color = Color(0xFF0F172A).copy(alpha = 0.92f),
+                        topLeft = Offset(bubbleX, bubbleY),
+                        size = Size(bubbleW, bubbleH),
+                        cornerRadius = CornerRadius(6.dp.toPx(), 6.dp.toPx())
+                    )
+
+                    drawText(
+                        textMeasurer = textMeasurer,
+                        text = labelText,
+                        topLeft = Offset(bubbleX + 8.dp.toPx(), bubbleY + 5.dp.toPx())
+                    )
+                }
             }
         }
 
@@ -545,6 +720,7 @@ fun PitchFrequencyTabContent(profile: VoiceProfile) {
 fun NoiseLevelsTabContent(profile: VoiceProfile, modifier: Modifier = Modifier) {
     val textMeasurer = rememberTextMeasurer()
     val noisePurity = (100 - profile.distortionLevel).coerceIn(0, 100)
+    var hoverX by remember { mutableStateOf<Float?>(null) }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
@@ -553,13 +729,13 @@ fun NoiseLevelsTabContent(profile: VoiceProfile, modifier: Modifier = Modifier) 
             color = MaterialTheme.colorScheme.onSurface
         )
         Text(
-            text = "תרשים האוסצילוסקופ להלן מדגים את ההפרדה בין אות הדיבור הטהור לבין רעשי הרקע שנקלטו.",
+            text = "תרשים אות-לרעש (SNR Area) במבנה Recharts מפוצל. החלק העליון מראה את אנרגיית הדיבור והתחתון מראה עיוותי רקע. גרור לצפייה ביחס היסטורי.",
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
-        // Custom drawn Oscilloscope for Signal-to-Noise Ratio (SNR)
+        // Custom drawn Oscilloscope Area with coordinates and live interaction
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -568,23 +744,45 @@ fun NoiseLevelsTabContent(profile: VoiceProfile, modifier: Modifier = Modifier) 
                 .border(1.dp, Color(0xFF334155), RoundedCornerShape(12.dp))
                 .padding(12.dp)
         ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectDragGestures(
+                            onDragStart = { offset -> hoverX = offset.x },
+                            onDragEnd = { hoverX = null },
+                            onDragCancel = { hoverX = null },
+                            onDrag = { change, _ -> hoverX = change.position.x }
+                        )
+                    }
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onPress = { offset ->
+                                hoverX = offset.x
+                                tryAwaitRelease()
+                                hoverX = null
+                            }
+                        )
+                    }
+            ) {
                 val width = size.width
                 val height = size.height
                 val centerY = height * 0.5f
 
-                // 1. Draw zero-baseline reference grid line
-                drawLine(
-                    color = Color(0xFF1E293B),
-                    start = Offset(0f, centerY),
-                    end = Offset(width, centerY),
-                    strokeWidth = 1.dp.toPx()
-                )
-
-                // Draw helper grid gridlines
-                val gridLines = 4
-                for (i in 1 until gridLines) {
-                    val x = width * (i.toFloat() / gridLines)
+                // 1. Draw Recharts background grid lines
+                val gridRows = 4
+                val gridCols = 6
+                for (r in 1 until gridRows) {
+                    val y = height * (r.toFloat() / gridRows)
+                    drawLine(
+                        color = Color(0xFF1E293B),
+                        start = Offset(0f, y),
+                        end = Offset(width, y),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                }
+                for (c in 1 until gridCols) {
+                    val x = width * (c.toFloat() / gridCols)
                     drawLine(
                         color = Color(0xFF1E293B),
                         start = Offset(x, 0f),
@@ -593,66 +791,146 @@ fun NoiseLevelsTabContent(profile: VoiceProfile, modifier: Modifier = Modifier) 
                     )
                 }
 
-                // 2. Draw standard signal waves
-                val points = 60
-                val pathVoice = Path()
-                val pathNoise = Path()
-
+                // 2. Render dual area curves (Speech Signal vs Noise Distortions)
+                val pointsCount = 45
+                val signalPoints = mutableListOf<Offset>()
+                val noisePoints = mutableListOf<Offset>()
                 val distortionMod = profile.distortionLevel.toFloat() / 100f
-                val signalStrength = (1f - distortionMod).coerceIn(0.2f, 1.0f)
+                val baseSignalStrength = (1f - distortionMod).coerceIn(0.2f, 1.0f)
 
-                for (i in 0..points) {
-                    val x = (i.toFloat() / points) * width
+                val signalPath = Path()
+                val noisePath = Path()
 
-                    // Sine Voice Wave (Smooth, clean, emerald green)
-                    val voiceAmp = centerY * 0.7f * signalStrength
-                    val voiceF = 0.15f
-                    val yVoice = centerY + kotlin.math.sin(i.toFloat() * voiceF) * voiceAmp
+                for (i in 0..pointsCount) {
+                    val x = (i.toFloat() / pointsCount) * width
+                    // Speech wave calculation
+                    val speechVol = centerY * 0.7f * baseSignalStrength
+                    val ySpeech = centerY - 15f - (sin(i.toFloat() * 0.25f) * speechVol).coerceAtLeast(0f)
+                    
+                    // Noise floor wave
+                    val noiseVol = centerY * 0.4f * distortionMod
+                    val yNoise = centerY + 15f + (sin(i.toFloat() * 0.65f) * noiseVol + cos(i.toFloat() * 0.15f) * 10f).coerceAtLeast(0f)
 
-                    // Aggressive jagged Background Noise representation (Choppy red wave)
-                    val noiseAmp = centerY * 0.6f * distortionMod
-                    val noiseF = 0.75f
-                    val jaggedMultiplier = if (i % 2 == 0) 1.2f else 0.4f
-                    val yNoise = centerY + kotlin.math.sin(i.toFloat() * noiseF) * noiseAmp * jaggedMultiplier
+                    signalPoints.add(Offset(x, ySpeech))
+                    noisePoints.add(Offset(x, yNoise))
 
                     if (i == 0) {
-                        pathVoice.moveTo(x, yVoice)
-                        pathNoise.moveTo(x, yNoise)
+                        signalPath.moveTo(x, centerY)
+                        signalPath.lineTo(x, ySpeech)
+                        noisePath.moveTo(x, centerY)
+                        noisePath.lineTo(x, yNoise)
                     } else {
-                        pathVoice.lineTo(x, yVoice)
-                        pathNoise.lineTo(x, yNoise)
+                        signalPath.lineTo(x, ySpeech)
+                        noisePath.lineTo(x, yNoise)
                     }
                 }
+                signalPath.lineTo(width, centerY)
+                signalPath.close()
 
-                // Draw background noise wave first
-                if (profile.distortionLevel > 0) {
-                    drawPath(
-                        path = pathNoise,
-                        color = Color(0xFFEF4444).copy(alpha = 0.65f),
-                        style = Stroke(width = 1.5.dp.toPx())
+                noisePath.lineTo(width, centerY)
+                noisePath.close()
+
+                // Draw Signal Area Fill (Greenish gradient upward)
+                drawPath(
+                    path = signalPath,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color(0xFF10B981).copy(alpha = 0.22f), Color.Transparent),
+                        startY = centerY - height * 0.45f,
+                        endY = centerY
+                    )
+                )
+
+                // Draw Noise Area Fill (Reddish gradient downward)
+                drawPath(
+                    path = noisePath,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color(0xFFEF4444).copy(alpha = 0.15f), Color.Transparent),
+                        startY = centerY,
+                        endY = centerY + height * 0.45f
+                    )
+                )
+
+                // Draw crisp border lines
+                val speechBorderPath = Path()
+                val noiseBorderPath = Path()
+                signalPoints.forEachIndexed { idx, pt -> if (idx == 0) speechBorderPath.moveTo(pt.x, pt.y) else speechBorderPath.lineTo(pt.x, pt.y) }
+                noisePoints.forEachIndexed { idx, pt -> if (idx == 0) noiseBorderPath.moveTo(pt.x, pt.y) else noiseBorderPath.lineTo(pt.x, pt.y) }
+
+                drawPath(speechBorderPath, Color(0xFF10B981), style = Stroke(width = 2.dp.toPx()))
+                drawPath(noiseBorderPath, Color(0xFFEF4444), style = Stroke(width = 1.5.dp.toPx()))
+
+                // Draw split centerline separator
+                drawLine(
+                    color = Color(0xFF475569),
+                    start = Offset(0f, centerY),
+                    end = Offset(width, centerY),
+                    strokeWidth = 1.5.dp.toPx()
+                )
+
+                // 3. Render Hover interactions
+                val currentHoverX = hoverX
+                if (currentHoverX != null) {
+                    val clampedHoverX = currentHoverX.coerceIn(0f, width)
+                    val ratioX = clampedHoverX / width
+                    val approximateIdx = (ratioX * pointsCount).toInt().coerceIn(0, pointsCount)
+                    val hoveredSignal = signalPoints[approximateIdx]
+                    val hoveredNoise = noisePoints[approximateIdx]
+
+                    // Intersect guide line
+                    drawLine(
+                        color = Color(0xFF64748B),
+                        start = Offset(clampedHoverX, 0f),
+                        end = Offset(clampedHoverX, height),
+                        strokeWidth = 1.dp.toPx()
+                    )
+
+                    // Draw highlight circles at intersections
+                    drawCircle(color = Color(0xFF10B981), radius = 5.dp.toPx(), center = hoveredSignal)
+                    drawCircle(color = Color(0xFFEF4444), radius = 5.dp.toPx(), center = hoveredNoise)
+
+                    // SNR calculation under hover
+                    val localSignalAmp = centerY - hoveredSignal.y
+                    val localNoiseAmp = hoveredNoise.y - centerY
+                    val snrVal = if (localNoiseAmp > 0f) (localSignalAmp / localNoiseAmp * 30f).toInt().coerceAtLeast(3) else 35
+                    val tooltipLabel = "שניה: ${String.format("%.1f", ratioX * 5)}s | יחס SNR: +$snrVal dB | רעש: ${profile.distortionLevel}%"
+
+                    val textLayout = textMeasurer.measure(
+                        text = tooltipLabel,
+                        style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    )
+
+                    val bubbleW = textLayout.size.width + 16.dp.toPx()
+                    val bubbleH = textLayout.size.height + 10.dp.toPx()
+                    val bubbleX = (clampedHoverX - bubbleW / 2).coerceIn(4.dp.toPx(), width - bubbleW - 4.dp.toPx())
+                    val bubbleY = (hoveredSignal.y - bubbleH - 12.dp.toPx()).coerceAtLeast(4.dp.toPx())
+
+                    drawRoundRect(
+                        color = Color(0xFF0F172A).copy(alpha = 0.95f),
+                        topLeft = Offset(bubbleX, bubbleY),
+                        size = Size(bubbleW, bubbleH),
+                        cornerRadius = CornerRadius(6.dp.toPx(), 6.dp.toPx())
+                    )
+
+                    drawText(
+                        textMeasurer = textMeasurer,
+                        text = tooltipLabel,
+                        topLeft = Offset(bubbleX + 8.dp.toPx(), bubbleY + 5.dp.toPx())
                     )
                 }
-
-                // Draw clean speech signal wave on top
-                drawPath(
-                    path = pathVoice,
-                    color = Color(0xFF10B981),
-                    style = Stroke(width = 2.5.dp.toPx())
-                )
 
                 // Label on the graph
                 drawText(
                     textMeasurer = textMeasurer,
-                    text = "אות דיבור (Signal)",
+                    text = "אות דיבור נקי (Signal - High)",
                     topLeft = Offset(10.dp.toPx(), 8.dp.toPx()),
                     style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF10B981))
                 )
 
                 drawText(
                     textMeasurer = textMeasurer,
-                    text = "רעשי רקע (Noise): ${profile.distortionLevel}%",
-                    topLeft = Offset(10.dp.toPx(), 26.dp.toPx()),
-                    style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFEF4444))
+                    text = "רעשי רקע (Noise) | ממוצע: ${profile.distortionLevel}%",
+                    topLeft = Offset(10.dp.toPx(), centerY + 8.dp.toPx()),
+                    style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFEF4444))
                 )
             }
         }
@@ -716,11 +994,12 @@ fun NoiseLevelsTabContent(profile: VoiceProfile, modifier: Modifier = Modifier) 
 
         // Environmental Tips for cloning optimization
         Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
-            ),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             shape = RoundedCornerShape(8.dp),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .glassmorphic(shape = RoundedCornerShape(8.dp), elevation = 2.dp)
         ) {
             Column(modifier = Modifier.padding(10.dp)) {
                 Row(

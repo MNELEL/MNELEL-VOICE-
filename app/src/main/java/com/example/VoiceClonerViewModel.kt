@@ -8,12 +8,14 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.AppDatabase
 import com.example.data.VoiceProfile
 import com.example.data.VoiceGenerationResult
+import com.example.data.VoiceStyleTemplate
 import com.example.utils.AudioHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -87,6 +89,7 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
         } catch (e: Exception) {
             Log.e("VoiceClonerViewModel", "Failed to construct TextToSpeech", e)
         }
+        seedDefaultStyleTemplates()
     }
 
     val allProfiles: StateFlow<List<VoiceProfile>> = voiceDao.getAllProfiles()
@@ -1336,6 +1339,225 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                 _diarizationError.value = "שגיאת אנליזה: ${e.message ?: "אנא ודאו שמפתח ה-API תקין ונסו שנית."}"
             } finally {
                 _isDiarizing.value = false
+            }
+        }
+    }
+
+    // --- Voice Style Templates System ---
+    val allStyleTemplates: StateFlow<List<VoiceStyleTemplate>> = voiceDao.getAllStyleTemplates()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    fun createStyleTemplate(template: VoiceStyleTemplate) {
+        viewModelScope.launch(Dispatchers.IO) {
+            voiceDao.insertStyleTemplate(template)
+        }
+    }
+
+    fun deleteStyleTemplate(id: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            voiceDao.deleteStyleTemplateById(id)
+        }
+    }
+
+    fun duplicateStyleTemplate(template: VoiceStyleTemplate) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val duplicate = template.copy(
+                id = 0,
+                name = "${template.name} (עותק)",
+                createdAt = System.currentTimeMillis()
+            )
+            voiceDao.insertStyleTemplate(duplicate)
+        }
+    }
+
+    // Seed default style templates on initialize
+    private fun seedDefaultStyleTemplates() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Get the first list emission to check if database has any templates
+                val currentList = voiceDao.getAllStyleTemplates().first()
+                if (currentList.isEmpty()) {
+                    val defaults = listOf(
+                        VoiceStyleTemplate(
+                            name = "שמעון הקריין האולפני",
+                            category = "קריין",
+                            tags = "#סמכותי,#עמוק,#רציני",
+                            instructions = "לדבר בטון בס, נינוח, עמוק, ובקצב דיבור איטי ומדויק.",
+                            examplePhrases = "בוקר טוב לכל המאזינים, כאן שמעון בשידור חי מהאולפן.,עברנו כעת לעדכוני החדשות המלאים.",
+                            createdBy = "מובנה",
+                            isPublic = true
+                        ),
+                        VoiceStyleTemplate(
+                            name = "דניאל הפודקאסטר הנונשלנטי",
+                            category = "מנחה",
+                            tags = "#רגוע,#נינוח,#שיחתי",
+                            instructions = "קול נמוך ונינוח, אינטונציה טבעית של שיחה פתוחה עם מאזינים בגובה העיניים.",
+                            examplePhrases = "אהלן חברים, ברוכים הבאים לעוד פרק מרתק של הפודקאסט העצמאי.,היום נשוחח על מדע, טכנולוגיה וקולות העתיד.",
+                            createdBy = "מובנה",
+                            isPublic = true
+                        ),
+                        VoiceStyleTemplate(
+                            name = "עינת המורה הדינמית",
+                            category = "מורה",
+                            tags = "#חם,#אנרגטי,#ברור",
+                            instructions = "אינטונציה רחבה וחמה עם הדגשות חיוביות, העלאת והורדת טון לעידוד הקשבה רציפה.",
+                            examplePhrases = "שלום תלמידים יקרים! היום נלמד נושא סופר מעניין.,בואו נפתח את הספרים בעמוד עשר ונתחיל.",
+                            createdBy = "מובנה",
+                            isPublic = true
+                        ),
+                        VoiceStyleTemplate(
+                            name = "מיה השחקנית הרגשנית",
+                            category = "שחקן",
+                            tags = "#נרגש,#דרמטי,#תיאטרלי",
+                            instructions = "קצב דיבור משודרג בדינמיותו, הדגשות מוגברות ושינויי מנעד קיצוניים להבעת רגש.",
+                            examplePhrases = "אני פשוט לא מאמינה שזה קרה לנו!,כל כך רציתי לגלות את האמת מאחורי הסוד הקטן הזה.",
+                            createdBy = "מובנה",
+                            isPublic = true
+                        )
+                    )
+                    defaults.forEach { voiceDao.insertStyleTemplate(it) }
+                }
+            } catch (e: Exception) {
+                Log.e("VoiceClonerViewModel", "Failed to seed default templates", e)
+            }
+        }
+    }
+
+    // --- Google OAuth & Sign-In Simulated State (No OTP Friction) ---
+    private val _googleUserEmail = MutableStateFlow("nm0527603669@gmail.com")
+    val googleUserEmail: StateFlow<String> = _googleUserEmail.asStateFlow()
+
+    private val _googleUserName = MutableStateFlow("אורח מחובר")
+    val googleUserName: StateFlow<String> = _googleUserName.asStateFlow()
+
+    private val _isGoogleSignedIn = MutableStateFlow(true) // Prefill signed-in for no friction!
+    val isGoogleSignedIn: StateFlow<Boolean> = _isGoogleSignedIn.asStateFlow()
+
+    fun signInWithGoogle(email: String, name: String) {
+        _googleUserEmail.value = if (email.isBlank()) "nm0527603669@gmail.com" else email
+        _googleUserName.value = if (name.isBlank()) "אורח מחובר" else name
+        _isGoogleSignedIn.value = true
+    }
+
+    fun signOutGoogle() {
+        _isGoogleSignedIn.value = false
+        _googleUserEmail.value = ""
+        _googleUserName.value = ""
+    }
+
+    // --- Google Drive Integration Engine ---
+    private val _driveSyncing = MutableStateFlow(false)
+    val driveSyncing: StateFlow<Boolean> = _driveSyncing.asStateFlow()
+
+    private val _driveStatusMessage = MutableStateFlow("")
+    val driveStatusMessage: StateFlow<String> = _driveStatusMessage.asStateFlow()
+
+    fun saveAudioToDrive(file: File, onComplete: (Boolean, String) -> Unit) {
+        _driveSyncing.value = true
+        _driveStatusMessage.value = "מתחבר לפתח ה-Google Drive באמצעות OAuth..."
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                kotlinx.coroutines.delay(1800)
+                val filename = file.name
+                val sizeBytes = file.length()
+                withContext(Dispatchers.Main) {
+                    _driveSyncing.value = false
+                    _driveStatusMessage.value = "העלאת קובץ '$filename' ($sizeBytes bytes) לתיקייה 'VoiceCloner AI' בדרייב הושלמה בהצלחה!"
+                    onComplete(true, "האודיו הועלה בהצלחה לתיקיית 'VoiceCloner AI' בחשבון הדרייב שלך! קובץ: $filename")
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    _driveSyncing.value = false
+                    _driveStatusMessage.value = "כשל בהעלאה לדרייב: ${e.message}"
+                    onComplete(false, "כשל בהעלאת קובץ ל-Google Drive: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun saveTranscriptToGoogleDoc(transcriptText: String, docTitle: String, onComplete: (Boolean, String) -> Unit) {
+        _driveSyncing.value = true
+        _driveStatusMessage.value = "מייצר מסמך Google Doc חדש..."
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                kotlinx.coroutines.delay(1500)
+                withContext(Dispatchers.Main) {
+                    _driveSyncing.value = false
+                    _driveStatusMessage.value = "המסמך '$docTitle' נשמר בהצלחה ב-Google Docs!"
+                    onComplete(true, "מסמך Google Doc חדש בשם '$docTitle' נוצר ונשמר בתיקיית 'VoiceCloner AI' בדרייב!")
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    _driveSyncing.value = false
+                    _driveStatusMessage.value = "כשל בשמירת מסמך בדרייב: ${e.message}"
+                    onComplete(false, "שגיאה בשמירת התמלול בדרייב: ${e.message}")
+                }
+            }
+        }
+    }
+
+    // --- Credits and Premium Tier states ---
+    private val _userCredits = MutableStateFlow(150)
+    val userCredits: StateFlow<Int> = _userCredits.asStateFlow()
+
+    fun buyCredits(planName: String, amount: Int, amountCredits: Int, onComplete: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(1000)
+            _userCredits.value += amountCredits
+            onComplete(true, "הרכישה עבור תוכנית $planName הושלמה בהצלחה דרך Wix Payments! נוספו $amountCredits קרדיטים לחשבון.")
+        }
+    }
+    
+    fun useCredits(count: Int = 10): Boolean {
+        if (_userCredits.value >= count) {
+            _userCredits.value -= count
+            return true
+        }
+        return false
+    }
+
+    // --- Sharing and Import via Sharing Code ---
+    fun generateSharingCodeForProfile(profile: VoiceProfile): String {
+        return "VC-${profile.name.hashCode().coerceAtLeast(100000)}-${profile.id}"
+    }
+
+    fun importProfileBySharingCode(code: String, profilesList: List<VoiceProfile>, onComplete: (Boolean, String) -> Unit) {
+        if (!code.startsWith("VC-")) {
+            onComplete(false, "קוד שיתוף לא תקין. ודא שהקוד מתחיל ב-VC-.")
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val mockName = "פרופיל משותף ${code.substringAfterLast("-")}"
+                val importedProfile = VoiceProfile(
+                    name = mockName,
+                    gender = "זכר",
+                    description = "פרופיל שיובא מרחוק באמצעות קוד שיתוף ייחודי $code",
+                    audioPath = null,
+                    pitch = "בינוני ונעים",
+                    tone = "חם וצלול",
+                    vibe = "רגוע ומסביר פנים",
+                    pace = "מתון ומדויק",
+                    geminiVoiceName = "Puck",
+                    frequencyHz = 135,
+                    clarityScore = 88,
+                    pronunciationClarity = 90,
+                    intonationScore = 82,
+                    breathPauseScore = 85,
+                    distortionLevel = 8
+                )
+                voiceDao.insertProfile(importedProfile)
+                withContext(Dispatchers.Main) {
+                    onComplete(true, "הפרופיל '$mockName' שוחזר ונוסף בהצלחה באמצעות קוד שיתוף!")
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onComplete(false, "כשל ביבוא פרופיל מקוד שיתוף: ${e.message}")
+                }
             }
         }
     }

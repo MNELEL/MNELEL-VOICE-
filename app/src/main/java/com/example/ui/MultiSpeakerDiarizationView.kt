@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.theme.glassmorphic
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.VoiceClonerViewModel
 import com.example.data.VoiceProfile
@@ -69,11 +70,12 @@ fun MultiSpeakerDiarizationView(
     }
 
     Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+        modifier = modifier
+            .fillMaxWidth()
+            .glassmorphic(shape = RoundedCornerShape(20.dp), elevation = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(20.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -303,28 +305,60 @@ fun MultiSpeakerDiarizationView(
                             }
                         }
 
-                        // Export option
-                        Button(
-                            onClick = {
-                                val transcript = diarizationSegments.joinToString("\n\n") { seg ->
-                                    val speaker = seg.assignedProfileName ?: seg.detectedSpeakerName
-                                    "[${seg.startTime} - ${seg.endTime}] $speaker:\n${seg.text}"
-                                }
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                val clip = android.content.ClipData.newPlainText("Meeting Transcript", transcript)
-                                clipboard.setPrimaryClip(clip)
-                                android.widget.Toast.makeText(context, "סיכום ותמלול הדוברים הועתק ללוח! 📋", android.widget.Toast.LENGTH_LONG).show()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp)
-                                .defaultMinSize(minHeight = 48.dp),
-                            shape = RoundedCornerShape(12.dp)
+                        // Export options toolbar
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
                         ) {
-                            Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("העתק את תמלול השיחה מחולק לפי דוברים", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            val isDriveSyncing by viewModel.driveSyncing.collectAsStateWithLifecycle()
+                            
+                            Button(
+                                onClick = {
+                                    val transcript = diarizationSegments.joinToString("\n\n") { seg ->
+                                        val speaker = seg.assignedProfileName ?: seg.detectedSpeakerName
+                                        "[${seg.startTime} - ${seg.endTime}] $speaker:\n${seg.text}"
+                                    }
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    val clip = android.content.ClipData.newPlainText("Meeting Transcript", transcript)
+                                    clipboard.setPrimaryClip(clip)
+                                    android.widget.Toast.makeText(context, "סיכום ותמלול הדוברים הועתק ללוח! 📋", android.widget.Toast.LENGTH_LONG).show()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .defaultMinSize(minHeight = 48.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("העתק את תמלול השיחה מחולק לפי דוברים", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            Button(
+                                onClick = {
+                                    val transcript = diarizationSegments.joinToString("\n\n") { seg ->
+                                        val speaker = seg.assignedProfileName ?: seg.detectedSpeakerName
+                                        "[${seg.startTime} - ${seg.endTime}] $speaker:\n${seg.text}"
+                                    }
+                                    viewModel.saveTranscriptToGoogleDoc(transcript, "תמלול שיחה מפוצלת") { success, msg ->
+                                        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
+                                enabled = !isDriveSyncing,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .defaultMinSize(minHeight = 48.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                if (isDriveSyncing) {
+                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
+                                } else {
+                                    Icon(imageVector = Icons.Default.Send, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("שמור תמלול פדגוגי כ-Google Doc [Drive] 📄", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
                         }
                     }
                 }
@@ -385,17 +419,12 @@ fun DiarizedSegmentRow(
     val isUnknown = matchedProfile == null
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isUnknown) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
-            else MaterialTheme.colorScheme.primary.copy(alpha = 0.03f)
-        ),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(
-            1.dp,
-            if (isUnknown) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-            else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-        )
+        modifier = Modifier
+            .fillMaxWidth()
+            .glassmorphic(shape = RoundedCornerShape(12.dp), elevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(12.dp)
     ) {
         Column(
             modifier = Modifier.padding(12.dp),

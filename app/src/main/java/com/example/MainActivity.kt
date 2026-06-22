@@ -39,9 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.VoiceProfile
 import com.example.ui.AudioRecordingInterface
-import com.example.ui.theme.MyApplicationTheme
-import com.example.ui.theme.BrandNavy
-import com.example.ui.theme.LightBg
+import com.example.ui.theme.*
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -49,6 +47,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import android.util.Log
+import com.example.ui.*
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,6 +84,10 @@ fun VoiceClonerAppScreen(
     val isSynthesizing by viewModel.isSynthesizing.collectAsStateWithLifecycle()
     val synthesizeError by viewModel.synthesizeError.collectAsStateWithLifecycle()
     val isPlayingProfileId by viewModel.isPlayingProfileId.collectAsStateWithLifecycle()
+
+    var showLandingPage by remember { mutableStateOf(true) }
+    var currentTab by remember { mutableStateOf(0) }
+    val templates by viewModel.allStyleTemplates.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val isPlayingRecorded by viewModel.isPlayingRecorded.collectAsStateWithLifecycle()
@@ -159,6 +162,15 @@ fun VoiceClonerAppScreen(
     val customApiKey by viewModel.customApiKey.collectAsStateWithLifecycle()
     var showApiKeyDialog by remember { mutableStateOf(false) }
     var showSettingsPage by remember { mutableStateOf(false) }
+
+    if (showLandingPage) {
+        LandingPageScreen(
+            viewModel = viewModel,
+            onGetStarted = { showLandingPage = false },
+            modifier = modifier
+        )
+        return
+    }
 
     Column(
         modifier = modifier
@@ -342,24 +354,54 @@ fun VoiceClonerAppScreen(
             )
         }
 
+        // 6 Tab Navigation Header Row (Scrollable Tab Row)
+        ScrollableTabRow(
+            selectedTabIndex = currentTab,
+            edgePadding = 0.dp,
+            containerColor = Color.Transparent,
+            contentColor = LightPrimary,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp)
+        ) {
+            val tabs = listOf(
+                "בית ושיבוט קול 🎙️",
+                "סינתזת דיבור 🗣️",
+                "תבניות סגנון 🎭",
+                "תמלול מרובה דוברים 👥",
+                "אימון וכיול מרצים 🎓",
+                "נקודות ורכישה 💎"
+            )
+            tabs.forEachIndexed { index, label ->
+                Tab(
+                    selected = currentTab == index,
+                    onClick = { currentTab = index },
+                    text = { Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                )
+            }
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
         ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
+            when (currentTab) {
+                0 -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
                 // Section 1: Core Recording Console
                 item {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("recorder_card"),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        shape = RoundedCornerShape(20.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                            .testTag("recorder_card")
+                            .glassmorphic(shape = RoundedCornerShape(20.dp), elevation = 6.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                        shape = RoundedCornerShape(20.dp)
                     ) {
                         Column(
                             modifier = Modifier.padding(16.dp),
@@ -475,16 +517,12 @@ fun VoiceClonerAppScreen(
 
                                         Card(
                                             shape = RoundedCornerShape(12.dp),
-                                            colors = CardDefaults.cardColors(
-                                                containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f)
-                                            ),
-                                            border = BorderStroke(
-                                                1.dp, 
-                                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                                            ),
+                                            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                                             modifier = Modifier
                                                 .fillMaxWidth(0.9f)
                                                 .padding(horizontal = 8.dp)
+                                                .glassmorphic(shape = RoundedCornerShape(12.dp), elevation = 2.dp)
                                         ) {
                                             Column(
                                                 modifier = Modifier.padding(12.dp),
@@ -693,9 +731,10 @@ fun VoiceClonerAppScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(vertical = 8.dp)
-                                        .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp).clickable { filePickerLauncher.launch("audio/*") },
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.3f)),
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                                        .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp).clickable { filePickerLauncher.launch("audio/*") }
+                                        .glassmorphic(shape = RoundedCornerShape(16.dp), elevation = 4.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                                     shape = RoundedCornerShape(16.dp)
                                 ) {
                                     Column(
@@ -733,16 +772,11 @@ fun VoiceClonerAppScreen(
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .border(
-                                            width = 1.dp,
-                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
-                                            shape = RoundedCornerShape(12.dp)
-                                        ),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
-                                    ),
+                                        .glassmorphic(shape = RoundedCornerShape(12.dp), elevation = 2.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                                     shape = RoundedCornerShape(12.dp)
-                                ) {
+                                 ) {
                                     Column(
                                         modifier = Modifier.padding(12.dp),
                                         horizontalAlignment = Alignment.CenterHorizontally
@@ -933,11 +967,11 @@ fun VoiceClonerAppScreen(
                             if (isAnalyzing) {
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
-                                    ),
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .glassmorphic(shape = RoundedCornerShape(16.dp), elevation = 4.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                                     shape = RoundedCornerShape(16.dp)
                                 ) {
                                     Column(
@@ -1061,11 +1095,10 @@ fun VoiceClonerAppScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.2f)
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)),
+                            .padding(vertical = 8.dp)
+                            .glassmorphic(shape = RoundedCornerShape(12.dp), elevation = 3.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Column(
@@ -1156,9 +1189,11 @@ fun VoiceClonerAppScreen(
                 if (profiles.isEmpty()) {
                     item {
                         Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .glassmorphic(shape = RoundedCornerShape(16.dp), elevation = 3.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                             shape = RoundedCornerShape(16.dp)
                         ) {
                             Column(
@@ -1233,6 +1268,39 @@ fun VoiceClonerAppScreen(
                 }
             }
         }
+        1 -> {
+                SpeechSynthesisScreen(
+                    viewModel = viewModel,
+                    profiles = profiles,
+                    templates = templates
+                )
+            }
+            2 -> {
+                StyleTemplatesScreen(
+                    viewModel = viewModel,
+                    templates = templates
+                )
+            }
+            3 -> {
+                MultiSpeakerDiarizationView(
+                    viewModel = viewModel,
+                    profiles = profiles
+                )
+            }
+            4 -> {
+                CalibrationTrainingScreen(
+                    viewModel = viewModel,
+                    profiles = profiles
+                )
+            }
+            5 -> {
+                PremiumCreditsScreen(
+                    viewModel = viewModel
+                )
+            }
+        }
+    }
+}
 
         if (showImportDialog) {
             AlertDialog(
@@ -1425,7 +1493,6 @@ fun VoiceClonerAppScreen(
             )
         }
     }
-}
 
 @Composable
 fun VoiceProfileCard(
@@ -1455,10 +1522,11 @@ fun VoiceProfileCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("profile_card_${profile.id}"),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+            .testTag("profile_card_${profile.id}")
+            .glassmorphic(shape = RoundedCornerShape(16.dp), elevation = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
@@ -1682,14 +1750,13 @@ fun VoiceProfileCard(
 
                     // Dynamic calibration card for 1:1 voice match tuning
                     Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.08f)
-                        ),
+                        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                         shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
+                            .glassmorphic(shape = RoundedCornerShape(12.dp), elevation = 3.dp)
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Row(
@@ -1979,10 +2046,11 @@ fun RowScope.TraitChip(label: String, value: String, color: Color) {
     Card(
         modifier = Modifier
             .weight(1f)
-            .padding(vertical = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.12f)),
-        shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.15f))
+            .padding(vertical = 2.dp)
+            .glassmorphic(shape = RoundedCornerShape(8.dp), elevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(8.dp)
     ) {
         Column(
             modifier = Modifier
@@ -2070,12 +2138,11 @@ fun VoiceDashboardSection(profile: VoiceProfile) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
-        ),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+            .padding(top = 12.dp)
+            .glassmorphic(shape = RoundedCornerShape(12.dp), elevation = 3.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(12.dp)
     ) {
         Column(
             modifier = Modifier.padding(12.dp)
@@ -2341,12 +2408,11 @@ fun Html5AudioPlayer(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFF1F3F4)
-        ),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, Color(0xFFDADCE0))
+            .padding(vertical = 4.dp)
+            .glassmorphic(shape = RoundedCornerShape(12.dp), elevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(12.dp)
     ) {
         Column(
             modifier = Modifier.padding(12.dp)

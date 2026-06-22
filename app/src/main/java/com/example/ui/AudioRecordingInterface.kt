@@ -3,6 +3,7 @@ package com.example.ui
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,12 +18,17 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.theme.glassmorphic
 import com.example.ui.theme.BrandNavy
 import com.example.ui.theme.LightGreen
 
@@ -44,13 +50,12 @@ fun AudioRecordingInterface(
 ) {
     Card(
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
+            .glassmorphic(shape = RoundedCornerShape(24.dp), elevation = 6.dp)
     ) {
         Column(
             modifier = Modifier
@@ -317,7 +322,7 @@ fun AudioRecordingInterface(
 }
 
 /**
- * Custom Sound Wave graphics representation specifically styled for the clean recording view.
+ * Custom Sound Wave graphics representation with rolling feedback and real-time input quality indicators.
  */
 @Composable
 private fun RecordingWaveform(
@@ -325,57 +330,145 @@ private fun RecordingWaveform(
     isPaused: Boolean,
     amplitude: Float
 ) {
-    val infiniteTransition = rememberInfiniteTransition()
-    val waveBarsCount = 15
-    
-    val pulseHeights = List(waveBarsCount) { index ->
-        infiniteTransition.animateFloat(
-            initialValue = 12f,
-            targetValue = if (isRecording && !isPaused) {
-                val ampFactor = if (amplitude > 0.05f) amplitude * 90f else 16f
-                val distanceCenter = index - (waveBarsCount / 2)
-                val gaussianFactor = Math.max(0.1f, 1f - (distanceCenter * distanceCenter * 0.1f).toFloat())
-                (12f + (ampFactor * gaussianFactor)).coerceIn(10f, 85f)
-            } else {
-                12f
-            },
-            animationSpec = infiniteRepeatable(
-                animation = tween(220 + (index * 25), easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            )
-        )
+    val amplitudeHistory = remember { mutableStateListOf<Float>() }
+
+    // Aggregate frames in real time during active recording
+    LaunchedEffect(amplitude, isRecording, isPaused) {
+        if (isRecording) {
+            if (!isPaused) {
+                amplitudeHistory.add(amplitude)
+                if (amplitudeHistory.size > 50) {
+                    amplitudeHistory.removeAt(0)
+                }
+            }
+        } else {
+            amplitudeHistory.clear()
+        }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(100.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.02f))
-            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f)), RoundedCornerShape(16.dp)),
-        contentAlignment = Alignment.Center
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(0.9f),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            pulseHeights.forEachIndexed { index, heightState ->
-                val barHeight = heightState.value
-                val color = if (isRecording) {
-                    if (isPaused) Color(0xFFF59E0B) else MaterialTheme.colorScheme.primary
-                } else {
-                    Color.Gray.copy(alpha = 0.4f)
-                }
-                
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = 3.dp)
-                        .width(4.dp)
-                        .height(barHeight.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(color)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(110.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.015f),
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f)
+                        )
+                    )
                 )
+                .border(
+                    BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)),
+                    RoundedCornerShape(20.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            val primaryColor = MaterialTheme.colorScheme.primary
+            val onSurfaceColor = MaterialTheme.colorScheme.onSurface
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(vertical = 12.dp, horizontal = 16.dp)
+            ) {
+                val canvasWidth = size.width
+                val canvasHeight = size.height
+                val barWidth = 4.dp.toPx()
+                val gap = 3.dp.toPx()
+                val step = barWidth + gap
+                val maxBars = (canvasWidth / step).toInt()
+
+                val displayList = if (isRecording) {
+                    if (amplitudeHistory.isEmpty()) {
+                        List(maxBars) { 0.03f }
+                    } else {
+                        val paddingSize = (maxBars - amplitudeHistory.size).coerceAtLeast(0)
+                        val padded = List(paddingSize) { 0.03f } + amplitudeHistory
+                        padded.takeLast(maxBars)
+                    }
+                } else {
+                    // pre-recording steady idle flow
+                    List(maxBars) { index ->
+                        val animOffset = index * 0.15f
+                        0.03f + 0.05f * kotlin.math.sin(animOffset).toFloat().coerceAtLeast(0f)
+                    }
+                }
+
+                val centerY = canvasHeight / 2f
+                val startX = (canvasWidth - (displayList.size * step)) / 2f
+
+                displayList.forEachIndexed { index, amp ->
+                    val x = startX + index * step
+                    val maxClipHeight = canvasHeight * 0.85f
+                    val barHeight = (amp * maxClipHeight).coerceIn(4.dp.toPx(), maxClipHeight)
+                    val top = centerY - barHeight / 2f
+                    
+                    val barColor = if (isRecording) {
+                        if (isPaused) {
+                            Color(0xFFF59E0B)
+                        } else {
+                            when {
+                                amp > 0.75f -> Color(0xFFEF4444)
+                                amp < 0.03f -> primaryColor.copy(alpha = 0.35f)
+                                else -> primaryColor
+                            }
+                        }
+                    } else {
+                        onSurfaceColor.copy(alpha = 0.12f)
+                    }
+
+                    drawRoundRect(
+                        color = barColor,
+                        topLeft = Offset(x, top),
+                        size = Size(barWidth, barHeight),
+                        cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
+                    )
+                }
+            }
+        }
+
+        // Live input feedback legends
+        AnimatedVisibility(
+            visible = isRecording && !isPaused,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFEF4444)))
+                    Text("רועש מדי (עיוות קול) ⚠️", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
+                    Text("איכות קלט מעולה ✨", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)))
+                    Text("שקט / עוצמה נמוכה 🤫", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                }
             }
         }
     }

@@ -14,6 +14,15 @@ interface VoiceDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertGenerationResult(result: VoiceGenerationResult): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertStyleTemplate(template: VoiceStyleTemplate): Long
+
+    @Query("SELECT * FROM voice_style_templates ORDER BY createdAt DESC")
+    fun getAllStyleTemplates(): Flow<List<VoiceStyleTemplate>>
+
+    @Query("DELETE FROM voice_style_templates WHERE id = :id")
+    suspend fun deleteStyleTemplateById(id: Int)
+
     @Query("SELECT * FROM voice_profiles ORDER BY createdAt DESC")
     fun getAllProfiles(): Flow<List<VoiceProfile>>
 
