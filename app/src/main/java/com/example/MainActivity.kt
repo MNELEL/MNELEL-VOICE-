@@ -234,6 +234,29 @@ fun VoiceClonerAppScreen(
             .background(Brush.verticalGradient(listOf(Color.White, LightBg)))
             .padding(16.dp)
     ) {
+        // Rate Limit Global Notification
+        val isWaitingForRateLimit by viewModel.isWaitingForRateLimit.collectAsStateWithLifecycle()
+        val recoverySeconds by viewModel.rateLimitRecoverySeconds.collectAsStateWithLifecycle()
+        
+        if (isWaitingForRateLimit) {
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "⏳ מערכת במצב 'מנוחה' עקב מכסת API. אנא המתן ${recoverySeconds} שניות.",
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
+        
         // App Header with API Key Connection Status Indicator (Answers "Is API client updated")
         Row(
             modifier = Modifier
@@ -444,8 +467,25 @@ fun VoiceClonerAppScreen(
                 .fillMaxWidth()
                 .weight(1f)
         ) {
-            when (currentTab) {
-                0 -> {
+            androidx.compose.animation.AnimatedContent(
+                targetState = currentTab,
+                transitionSpec = {
+                    (androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300)) +
+                    androidx.compose.animation.slideInHorizontally(
+                        initialOffsetX = { fullWidth -> if (targetState > initialState) fullWidth else -fullWidth },
+                        animationSpec = androidx.compose.animation.core.tween(300)
+                    )).togetherWith(
+                        androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300)) +
+                        androidx.compose.animation.slideOutHorizontally(
+                            targetOffsetX = { fullWidth -> if (targetState > initialState) -fullWidth else fullWidth },
+                            animationSpec = androidx.compose.animation.core.tween(300)
+                        )
+                    )
+                },
+                label = "Tab Transition"
+            ) { targetTab ->
+                when (targetTab) {
+                    0 -> {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -1371,6 +1411,7 @@ fun VoiceClonerAppScreen(
             }
         }
     }
+}
 }
 
         if (showImportDialog) {

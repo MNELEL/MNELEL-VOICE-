@@ -314,11 +314,10 @@ fun SpeechSynthesisScreen(
     val moodStates = remember {
         listOf(
             "מקורי/רגיל" to "סגנון הדיבור המקורי והטבעי",
-            "עייף ותשוש" to "קול עייף, תדר נמוך וקצב הקראה איטי",
-            "שמח וערני" to "קול נמרץ, תדר גבוה וקצב דיבור מהיר",
-            "סמכותי ורציני" to "דיקציה מושלמת, תדר עמוק והדגשה פונטית",
-            "לחישה ואיפוק" to "עוצמת שמע מונמכת ואינטונציה רגילה",
-            "נרגש ונלהב" to "מנעד צלילים משתנה ותהודה מתפרצת"
+            "Emotional (רגשני)" to "קול מלא ברגש, הבעה עמוקה ונוגעת ללב",
+            "Professional (מקצועי)" to "דיקציה מושלמת, רציני, אמין וסמכותי",
+            "Whisper (לחישה)" to "דיבור שקט, אינטימי ועדין, עוצמת שמע מונמכת",
+            "שמח וערני" to "קול נמרץ, תדר גבוה וקצב דיבור מהיר"
         )
     }
     var selectedMoodState by remember { mutableStateOf("מקורי/רגיל") }
@@ -329,24 +328,20 @@ fun SpeechSynthesisScreen(
                 pitchTuning = 0f
                 speedTuning = 0f
             }
-            "עייף ותשוש" -> {
-                pitchTuning = -0.3f
-                speedTuning = -0.4f
+            "Emotional (רגשני)" -> {
+                pitchTuning = 0.1f
+                speedTuning = -0.1f
+            }
+            "Professional (מקצועי)" -> {
+                pitchTuning = -0.15f
+                speedTuning = 0.05f
+            }
+            "Whisper (לחישה)" -> {
+                pitchTuning = -0.2f
+                speedTuning = -0.2f
             }
             "שמח וערני" -> {
                 pitchTuning = 0.3f
-                speedTuning = 0.3f
-            }
-            "סמכותי ורציני" -> {
-                pitchTuning = -0.15f
-                speedTuning = -0.1f
-            }
-            "לחישה ואיפוק" -> {
-                pitchTuning = -0.1f
-                speedTuning = -0.2f
-            }
-            "נרגש ונלהב" -> {
-                pitchTuning = 0.4f
                 speedTuning = 0.3f
             }
         }
@@ -470,11 +465,10 @@ fun SpeechSynthesisScreen(
                 ) {
                     Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         val learnedDesc = when (selectedMoodState) {
-                            "עייף ותשוש" -> "🛌 המודל זיהה כי במצבי עייפות תדירות קולך יורדת ב-15%, הדחיסה האקוסטית מועצמת והפסקות הנשימה מתארכות ב-30% ביחס למקור."
+                            "Emotional (רגשני)" -> "❤️ המערכת מתאימה את הקול כדי להביע רגש עמוק, התלהבות או אמפתיה, עם שינויי תדר קלים שיוצרים תחושת כנות."
+                            "Professional (מקצועי)" -> "🎓 המערכת מנווטת את תדרי הליבה לטון נמוך, יציב ומתוחכם – המקל על הובלה, העברת סמכות ויצירת ריכוז פדגוגי."
+                            "Whisper (לחישה)" -> "🤫 קול דק ועדין: מסנן רעשים קבועים ברוחב פתוח ומדמה אווירה אינטימית ואינטונציה שקטה ונקייה מהד."
                             "שמח וערני" -> "🌅 המערכת למדה כי במצבי שמחה ורעננות הקול נהיה מלודי, תדר הדיבור הממוצע עולה ב-25 הרץ, והדיקציה קופצנית ומהירה."
-                            "סמכותי ורציני" -> "🎓 המערכת מנווטת את תדרי הליבה לטון נמוך, יציב ומתוחכם – המקל על הובלה, העברת סמכות ויצירת ריכוז פדגוגי."
-                            "לחישה ואיפוק" -> "🤫 קול דק ועדין: מסנן רעשים קבועים ברוחב פתוח ומדמה אווירה אינטימית ואינטונציה שקטה ונקייה מהד."
-                            "נרגש ונלהב" -> "🔥 מועצמת מנגינת הדיבור לקבלת מנעד מגוון ועשיר ביותר, קצב הקראה מהיר וביטוי תוסס המביע תשוקה."
                             else -> "✨ סגנון מקורי: ייעשה שימוש במנעד הביומטרי הרגיל כפי שנקלט בדגימת הקול שהקלטת בלשונית הבית."
                         }
                         Text(
@@ -739,16 +733,27 @@ fun SpeechSynthesisScreen(
 
                             OutlinedButton(
                                 onClick = {
-                                    // Simulated local download
-                                    android.widget.Toast.makeText(context, "הקובץ 'VoiceCloner_Result_${result.id}.wav' הורד לתיקיית Downloads במכשיר בהצלחה!", android.widget.Toast.LENGTH_LONG).show()
+                                    try {
+                                        val sourceFile = File(result.audioPath)
+                                        if (sourceFile.exists()) {
+                                            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                                            val destFile = File(downloadsDir, "VoiceCloner_Result_${result.id}.mp3")
+                                            sourceFile.copyTo(destFile, overwrite = true)
+                                            android.widget.Toast.makeText(context, "הקובץ יוצא בהצלחה כ-MP3 לתיקיית ההורדות!", android.widget.Toast.LENGTH_LONG).show()
+                                        } else {
+                                            android.widget.Toast.makeText(context, "שגיאה: קובץ המקור לא נמצא", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(context, "שגיאה בייצוא: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
                                 },
                                 shape = RoundedCornerShape(8.dp),
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(14.dp), tint = DarkCharcoal)
+                                Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp), tint = DarkCharcoal)
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("הורדה מקומית 💾", fontSize = 11.sp, color = DarkCharcoal)
+                                Text("ייצוא ל-MP3 💾", fontSize = 11.sp, color = DarkCharcoal)
                             }
 
                             IconButton(

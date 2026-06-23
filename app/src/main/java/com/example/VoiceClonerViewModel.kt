@@ -246,6 +246,37 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
         .connectTimeout(60, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
+        .addInterceptor { chain ->
+            var response: okhttp3.Response? = null
+            var retryCount = 0
+            val maxRetries = 3
+            var backoffMs = 1000L
+
+            while (true) {
+                try {
+                    val request = chain.request()
+                    response = chain.proceed(request)
+                    if (response.code == 429 && retryCount < maxRetries) {
+                        response.close()
+                        Thread.sleep(backoffMs)
+                        backoffMs *= 2
+                        retryCount++
+                        continue
+                    }
+                    return@addInterceptor response
+                } catch (e: java.io.IOException) {
+                    if (retryCount < maxRetries) {
+                        Thread.sleep(backoffMs)
+                        backoffMs *= 2
+                        retryCount++
+                        continue
+                    }
+                    throw e
+                }
+            }
+            // This line should not be reached
+            throw java.io.IOException("Failed after retries")
+        }
         .build()
 
     fun startRecording() {
@@ -544,6 +575,256 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun exportResultToMp3(result: VoiceGenerationResult, context: android.content.Context) {
+        val file = File(result.audioPath)
+        if (!file.exists()) {
+            _synthesizeError.value = "קובץ השמע לא נמצא"
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val resolver = context.contentResolver
+                val contentValues = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.Audio.Media.DISPLAY_NAME, "Voice_${result.profileName}_${System.currentTimeMillis()}.mp3")
+                    put(android.provider.MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg")
+                    put(android.provider.MediaStore.Audio.Media.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+                }
+
+                val uri = resolver.insert(android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, contentValues)
+                uri?.let {
+                    resolver.openOutputStream(it)?.use { output ->
+                        file.inputStream().use { input ->
+                            input.copyTo(output)
+                        }
+                    }
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(context, "הקובץ נשמר בהצלחה בתיקיית ההורדות! 📥", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("VoiceClonerViewModel", "Failed to export to MP3", e)
+                withContext(Dispatchers.Main) {
+                    _synthesizeError.value = "שגיאה בשמירת קובץ MP3: ${e.message}"
+                }
+            }
+        }
+    }
+
+    // API Rate Limit Recovery States
+    private val _isWaitingForRateLimit = MutableStateFlow(false)
+    val isWaitingForRateLimit: StateFlow<Boolean> = _isWaitingForRateLimit.asStateFlow()
+    
+    private val _rateLimitRecoverySeconds = MutableStateFlow(0)
+    val rateLimitRecoverySeconds: StateFlow<Int> = _rateLimitRecoverySeconds.asStateFlow()
+
+    private var rateLimitRecoveryJob: kotlinx.coroutines.Job? = null
+    
+    private fun triggerRateLimitRecovery() {
+        if (_isWaitingForRateLimit.value) return
+        
+        _isWaitingForRateLimit.value = true
+        _rateLimitRecoverySeconds.value = 60
+        
+        rateLimitRecoveryJob?.cancel()
+        rateLimitRecoveryJob = viewModelScope.launch {
+            while (_rateLimitRecoverySeconds.value > 0) {
+                kotlinx.coroutines.delay(1000)
+                _rateLimitRecoverySeconds.value -= 1
+            }
+            _isWaitingForRateLimit.value = false
+        }
+    }
+
+// API Activity Tracker
+    // Combining UI state flows for activity
+    val isAnyApiActive: StateFlow<Boolean> = kotlinx.coroutines.flow.combine(
+        _isAnalyzing,
+        _isSynthesizing,
+        // _isDiarizing, // Not defined yet in this snippet, add if needed or ignore
+    ) { analyzing, synthesizing ->
+        analyzing || synthesizing
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    // Result cache for synthesis (Text + ProfileId)
+    private val synthesisCache = mutableMapOf<String, String>()
+
+    fun synthesizeText(
+        text: String, 
+        profile: VoiceProfile,
+        pitchTuningPercent: Float = 0f,
+        speedTuningPercent: Float = 0f,
+        vibeModifier: String = "מקורי"
+    ) {
+        if (text.isBlank()) {
+            _synthesizeError.value = "אנא הזן טקסט לייצור קול"
+            return
+        }
+
+        // Caching check
+        val cacheKey = "${text.trim()}_${profile.id}_${pitchTuningPercent}_${speedTuningPercent}_${vibeModifier}"
+        if (synthesisCache.containsKey(cacheKey)) {
+             // For now, allow re-synthesis to support refreshing or just play the cached one?
+             // Re-synthesis is safer to ensure it works.
+        }
+
+        _isSynthesizing.value = true
+        _synthesizeError.value = null
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val apiKey = getEffectiveApiKey()
+                if (apiKey.isEmpty()) {
+                    throw IllegalStateException("אנא הגדר מפתח Gemini API תקין בלוח הבקרה / הגדרות האפליקציה או בקובץ .env")
+                }
+
+                // Determine acoustic pacing, pitch, and vibe directives based on analyzed characteristics
+                val basePace = when {
+                    profile.pace.contains("מהיר") || profile.pace.contains("מהירה") || profile.pace.lowercase().contains("fast") -> "high-speed tempo, rapid articulation, short word gaps"
+                    profile.pace.contains("איטי") || profile.pace.contains("איטית") || profile.pace.lowercase().contains("slow") -> "slow, tranquil, deliberate pace with frequent natural breathing pauses"
+                    else -> "steady, moderate, natural speaking pace with normal pauses"
+                }
+
+                val basePitch = when {
+                    profile.frequencyHz < 110 -> "very deep, baritone, resonant low-pitch chest voice"
+                    profile.frequencyHz < 150 -> "moderately low-pitch register with rich vocal warmth"
+                    profile.frequencyHz > 215 -> "clear, high-pitched, feminine, melodic soprano tone"
+                    profile.frequencyHz > 175 -> "moderately high-pitched, bright, warm alto style"
+                    else -> "neutral mid-range pitch, balanced larynx position"
+                }
+
+                // Add slider adjustments to the prompt text if modified
+                val userSpeedAdjustment = when {
+                    speedTuningPercent > 10f -> "Increase speaking rate and speed by ${speedTuningPercent.toInt()}% for a faster, snappier flow."
+                    speedTuningPercent < -10f -> "Slow down speaking rate and pace by ${Math.abs(speedTuningPercent.toInt())}% for a calmer, elongated cadence."
+                    else -> "Keep speaking rate naturally aligned with the profile."
+                }
+
+                val userPitchAdjustment = when {
+                    pitchTuningPercent > 10f -> "Raise the vocal register/pitch by ${pitchTuningPercent.toInt()}% higher than standard for brighter resonance."
+                    pitchTuningPercent < -10f -> "Lower the vocal register/pitch by ${Math.abs(pitchTuningPercent.toInt())}% deeper for extra chest resonance."
+                    else -> "Match the natural frequency of the profile."
+                }
+
+                val activeVibe = if (vibeModifier != "מקורי") {
+                    "Express the text with an explicit '$vibeModifier' custom emotional inflection override."
+                } else {
+                    "Express with a ${profile.vibe} mood and ${profile.tone} signature, exactly mirroring the original speaker's vibe."
+                }
+
+                // We construct a highly detailed voice modulation prompt in English (as Gemini processes prompt directives for audio in OOB dynamic voices extremely well)
+                val promptText = """
+                    SYSTEM COMMAND: Perform an extremely accurate, high-fidelity 1:1 voice cloning emulation of ${profile.name} (Gender: ${profile.gender}).
+                    You are speaking directly as ${profile.name} himself/herself. Modulate your generated speech to replicate these traits perfectly:
+                    
+                    AUDIO ATTRIBUTES TO EMULATE:
+                    1. Target Vocal Pitch Register: $basePitch (Fundamental frequency: ${profile.frequencyHz} Hz). -> Apply tuning: $userPitchAdjustment
+                    2. Speech Cadence/Pacing: $basePace. -> Apply tuning: $userSpeedAdjustment
+                    3. Vocal Quality and Tone: ${profile.tone} (${profile.description}).
+                    4. Emotional Delivery Aura / Vibe: $activeVibe.
+                    5. Intonation Rhythm Score: ${profile.intonationScore}/100.
+                    6. Articulation & Hebrew Accents: ${profile.pronunciationClarity}/100 clarity.
+
+                    Read the following Hebrew text exactly as written. Ensure incredibly natural phrasing, proper Hebrew accents, and flawless vocal fidelity:
+                    
+                    "$text"
+                """.trimIndent()
+
+                val requestJson = JSONObject().apply {
+                    put("contents", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("parts", JSONArray().apply {
+                                put(JSONObject().apply {
+                                    put("text", promptText)
+                                })
+                            })
+                        })
+                    })
+                    put("generationConfig", JSONObject().apply {
+                        put("responseModalities", JSONArray().apply {
+                            put("AUDIO")
+                        })
+                        put("speechConfig", JSONObject().apply {
+                            put("voiceConfig", JSONObject().apply {
+                                put("prebuiltVoiceConfig", JSONObject().apply {
+                                    put("voiceName", profile.geminiVoiceName)
+                                })
+                            })
+                        })
+                    })
+                }
+
+                val mediaType = "application/json; charset=utf-8".toMediaType()
+                val requestBody = requestJson.toString().toRequestBody(mediaType)
+                val request = Request.Builder()
+                    .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=$apiKey")
+                    .post(requestBody)
+                    .build()
+
+                val response = okHttpClient.newCall(request).execute()
+                if (!response.isSuccessful) {
+                    throw IllegalStateException("שגיאת ייצור שמע קול: ${response.code}")
+                }
+
+                val responseBodyStr = response.body?.string() ?: throw IllegalStateException("שמע ריק")
+                val responseObj = JSONObject(responseBodyStr)
+
+                val candidates = responseObj.getJSONArray("candidates")
+                val parts = candidates.getJSONObject(0).getJSONObject("content").getJSONArray("parts")
+                
+                // Audio is returned in inlineData
+                var foundAudioBase64: String? = null
+                for (i in 0 until parts.length()) {
+                    val partObj = parts.getJSONObject(i)
+                    if (partObj.has("inlineData")) {
+                        val inlineData = partObj.getJSONObject("inlineData")
+                        if (inlineData.optString("mimeType", "").contains("audio")) {
+                            foundAudioBase64 = inlineData.getString("data")
+                            break
+                        }
+                    }
+                }
+
+                if (foundAudioBase64 == null) {
+                    throw IllegalStateException("השרת לא החזיר שמע מתאים לתורת הקול")
+                }
+
+                withContext(Dispatchers.Main) {
+                    _isSynthesizing.value = false
+                    
+                    // Decoded audio base64 is saved permanently to app storage and logged inside DB
+                    val persistentFile = audioHelper.saveBase64ToPersistentFile(foundAudioBase64, profile.name)
+                    if (persistentFile != null) {
+                        val newResult = VoiceGenerationResult(
+                            profileId = profile.id,
+                            profileName = profile.name,
+                            inputText = text,
+                            audioPath = persistentFile.absolutePath
+                        )
+                        viewModelScope.launch(Dispatchers.IO) {
+                            voiceDao.insertGenerationResult(newResult)
+                        }
+                        
+                        // Update Cache
+                        synthesisCache[cacheKey] = persistentFile.absolutePath
+                        
+                        // Automatically play the newly generated file nicely
+                        playResultSample(newResult)
+                    } else {
+                        audioHelper.playBase64Audio(foundAudioBase64)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("VoiceClonerViewModel", "Synthesis failed", e)
+                withContext(Dispatchers.Main) {
+                    _isSynthesizing.value = false
+                    _synthesizeError.value = getFriendlyErrorMessage(e)
+                }
+            }
+        }
+    }
+
+
     fun getFriendlyErrorMessage(throwable: Throwable): String {
         val msg = throwable.message ?: ""
         
@@ -559,6 +840,7 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
         
         // Handle 429 Rate limits
         if (msg.contains("429")) {
+            triggerRateLimitRecovery()
             return "חרגת ממכסת הבקשות עבור מפתח ה-API הנוכחי (שגיאה 429). אנא המתן דקה-שתיים לפני הניסיון הבא."
         }
         
@@ -700,171 +982,6 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                 withContext(Dispatchers.Main) {
                     _isAnalyzing.value = false
                     _analysisError.value = getFriendlyErrorMessage(e)
-                }
-            }
-        }
-    }
-
-    fun synthesizeText(
-        text: String, 
-        profile: VoiceProfile,
-        pitchTuningPercent: Float = 0f,
-        speedTuningPercent: Float = 0f,
-        vibeModifier: String = "מקורי"
-    ) {
-        if (text.isBlank()) {
-            _synthesizeError.value = "אנא הזן טקסט לייצור קול"
-            return
-        }
-
-        _isSynthesizing.value = true
-        _synthesizeError.value = null
-
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val apiKey = getEffectiveApiKey()
-                if (apiKey.isEmpty()) {
-                    throw IllegalStateException("אנא הגדר מפתח Gemini API תקין בלוח הבקרה / הגדרות האפליקציה או בקובץ .env")
-                }
-
-                // Determine acoustic pacing, pitch, and vibe directives based on analyzed characteristics
-                val basePace = when {
-                    profile.pace.contains("מהיר") || profile.pace.contains("מהירה") || profile.pace.lowercase().contains("fast") -> "high-speed tempo, rapid articulation, short word gaps"
-                    profile.pace.contains("איטי") || profile.pace.contains("איטית") || profile.pace.lowercase().contains("slow") -> "slow, tranquil, deliberate pace with frequent natural breathing pauses"
-                    else -> "steady, moderate, natural speaking pace with normal pauses"
-                }
-
-                val basePitch = when {
-                    profile.frequencyHz < 110 -> "very deep, baritone, resonant low-pitch chest voice"
-                    profile.frequencyHz < 150 -> "moderately low-pitch register with rich vocal warmth"
-                    profile.frequencyHz > 215 -> "clear, high-pitched, feminine, melodic soprano tone"
-                    profile.frequencyHz > 175 -> "moderately high-pitched, bright, warm alto style"
-                    else -> "neutral mid-range pitch, balanced larynx position"
-                }
-
-                // Add slider adjustments to the prompt text if modified
-                val userSpeedAdjustment = when {
-                    speedTuningPercent > 10f -> "Increase speaking rate and speed by ${speedTuningPercent.toInt()}% for a faster, snappier flow."
-                    speedTuningPercent < -10f -> "Slow down speaking rate and pace by ${Math.abs(speedTuningPercent.toInt())}% for a calmer, elongated cadence."
-                    else -> "Keep speaking rate naturally aligned with the profile."
-                }
-
-                val userPitchAdjustment = when {
-                    pitchTuningPercent > 10f -> "Raise the vocal register/pitch by ${pitchTuningPercent.toInt()}% higher than standard for brighter resonance."
-                    pitchTuningPercent < -10f -> "Lower the vocal register/pitch by ${Math.abs(pitchTuningPercent.toInt())}% deeper for extra chest resonance."
-                    else -> "Match the natural frequency of the profile."
-                }
-
-                val activeVibe = if (vibeModifier != "מקורי") {
-                    "Express the text with an explicit '$vibeModifier' custom emotional inflection override."
-                } else {
-                    "Express with a ${profile.vibe} mood and ${profile.tone} signature, exactly mirroring the original speaker's vibe."
-                }
-
-                // We construct a highly detailed voice modulation prompt in English (as Gemini processes prompt directives for audio in OOB dynamic voices extremely well)
-                val promptText = """
-                    SYSTEM COMMAND: Perform an extremely accurate, high-fidelity 1:1 voice cloning emulation of ${profile.name} (Gender: ${profile.gender}).
-                    You are speaking directly as ${profile.name} himself/herself. Modulate your generated speech to replicate these traits perfectly:
-                    
-                    AUDIO ATTRIBUTES TO EMULATE:
-                    1. Target Vocal Pitch Register: $basePitch (Fundamental frequency: ${profile.frequencyHz} Hz). -> Apply tuning: $userPitchAdjustment
-                    2. Speech Cadence/Pacing: $basePace. -> Apply tuning: $userSpeedAdjustment
-                    3. Vocal Quality and Tone: ${profile.tone} (${profile.description}).
-                    4. Emotional Delivery Aura / Vibe: $activeVibe.
-                    5. Intonation Rhythm Score: ${profile.intonationScore}/100.
-                    6. Articulation & Hebrew Accents: ${profile.pronunciationClarity}/100 clarity.
-
-                    Read the following Hebrew text exactly as written. Ensure incredibly natural phrasing, proper Hebrew accents, and flawless vocal fidelity:
-                    
-                    "$text"
-                """.trimIndent()
-
-                val requestJson = JSONObject().apply {
-                    put("contents", JSONArray().apply {
-                        put(JSONObject().apply {
-                            put("parts", JSONArray().apply {
-                                put(JSONObject().apply {
-                                    put("text", promptText)
-                                })
-                            })
-                        })
-                    })
-                    put("generationConfig", JSONObject().apply {
-                        put("responseModalities", JSONArray().apply {
-                            put("AUDIO")
-                        })
-                        put("speechConfig", JSONObject().apply {
-                            put("voiceConfig", JSONObject().apply {
-                                put("prebuiltVoiceConfig", JSONObject().apply {
-                                    put("voiceName", profile.geminiVoiceName)
-                                })
-                            })
-                        })
-                    })
-                }
-
-                val mediaType = "application/json; charset=utf-8".toMediaType()
-                val requestBody = requestJson.toString().toRequestBody(mediaType)
-                val request = Request.Builder()
-                    .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=$apiKey")
-                    .post(requestBody)
-                    .build()
-
-                val response = okHttpClient.newCall(request).execute()
-                if (!response.isSuccessful) {
-                    throw IllegalStateException("שגיאת ייצור שמע קול: ${response.code}")
-                }
-
-                val responseBodyStr = response.body?.string() ?: throw IllegalStateException("שמע ריק")
-                val responseObj = JSONObject(responseBodyStr)
-
-                val candidates = responseObj.getJSONArray("candidates")
-                val parts = candidates.getJSONObject(0).getJSONObject("content").getJSONArray("parts")
-                
-                // Audio is returned in inlineData
-                var foundAudioBase64: String? = null
-                for (i in 0 until parts.length()) {
-                    val partObj = parts.getJSONObject(i)
-                    if (partObj.has("inlineData")) {
-                        val inlineData = partObj.getJSONObject("inlineData")
-                        if (inlineData.optString("mimeType", "").contains("audio")) {
-                            foundAudioBase64 = inlineData.getString("data")
-                            break
-                        }
-                    }
-                }
-
-                if (foundAudioBase64 == null) {
-                    throw IllegalStateException("השרת לא החזיר שמע מתאים לתורת הקול")
-                }
-
-                withContext(Dispatchers.Main) {
-                    _isSynthesizing.value = false
-                    
-                    // Decoded audio base64 is saved permanently to app storage and logged inside DB
-                    val persistentFile = audioHelper.saveBase64ToPersistentFile(foundAudioBase64, profile.name)
-                    if (persistentFile != null) {
-                        val newResult = VoiceGenerationResult(
-                            profileId = profile.id,
-                            profileName = profile.name,
-                            inputText = text,
-                            audioPath = persistentFile.absolutePath
-                        )
-                        viewModelScope.launch(Dispatchers.IO) {
-                            voiceDao.insertGenerationResult(newResult)
-                        }
-                        
-                        // Automatically play the newly generated file nicely
-                        playResultSample(newResult)
-                    } else {
-                        audioHelper.playBase64Audio(foundAudioBase64)
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e("VoiceClonerViewModel", "Synthesis failed", e)
-                withContext(Dispatchers.Main) {
-                    _isSynthesizing.value = false
-                    _synthesizeError.value = getFriendlyErrorMessage(e)
                 }
             }
         }
