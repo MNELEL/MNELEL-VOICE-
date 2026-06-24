@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <g fill="none" fill-rule="evenodd">
+    <!-- Microphone body (white) -->
+    <path d="M512 256c-48 0-88 40-88 88v160c0 48 40 88 88 88s88-40 88-88V344c0-48-40-88-88-88z" fill="#FFFFFF"/>
+    <!-- Microphone stem -->
+    <rect x="480" y="608" width="64" height="128" rx="8" fill="#FFFFFF"/>
+    <!-- Left waveform -->
+    <path d="M336 360c12-28 36-48 64-48v32c-16 0-32 12-40 32-6 14-10 30-10 48h-26c0-34 6-66 12-64z" fill="#FFFFFF" opacity="0.95"/>
+    <!-- Right waveform -->
+    <path d="M688 360c-12-28-36-48-64-48v32c16 0 32 12 40 32 6 14 10 30 10 48h26c0-34-6-66-12-64z" fill="#FFFFFF" opacity="0.95"/>
+    <!-- small waveform lines near bottom (stylized) -->
+    <g fill="#FFFFFF" opacity="0.9">
+      <rect x="272" y="720" width="24" height="96" rx="6"/>
+      <rect x="320" y="688" width="16" height="128" rx="6"/>
+      <rect x="360" y="704" width="12" height="112" rx="6"/>
+      <rect x="652" y="720" width="24" height="96" rx="6"/>
+      <rect x="612" y="688" width="16" height="128" rx="6"/>
+      <rect x="572" y="704" width="12" height="112" rx="6"/>
+    </g>
+  </g>
+</svg>
