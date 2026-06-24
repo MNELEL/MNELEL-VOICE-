@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.glassmorphic
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.platform.testTag
 import com.example.VoiceClonerViewModel
 import com.example.data.VoiceProfile
 import com.example.data.DiarizationSegment
@@ -241,25 +242,86 @@ fun MultiSpeakerDiarizationView(
 
                     // Progress Loader
                     if (isDiarizing) {
-                        Column(
+                        val steps = remember {
+                            listOf(
+                                "קורא את קובץ השמע המיובא...",
+                                "מבצע ספקטרוגרפיה ומזהה מעברי דוברים...",
+                                "משווה חתימות קול מול פרופילים קיימים בבינה מלאכותית...",
+                                "מקטלג מקטעי שיח ומבצע סינון רעשי סביבה...",
+                                "מעבד ומחלץ תמליל ותמלול שיחה באמצעות Gemini...",
+                                "בונה מפת שיח רב-ערוצית..."
+                            )
+                        }
+                        var currentStep by remember { mutableStateOf(0) }
+                        LaunchedEffect(Unit) {
+                            while (true) {
+                                kotlinx.coroutines.delay(2000)
+                                currentStep = (currentStep + 1) % steps.size
+                            }
+                        }
+
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                .padding(vertical = 12.dp)
+                                .testTag("diarization_loading_card"),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.12f)
+                            ),
+                            border = BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                            )
                         ) {
-                            CircularProgressIndicator(strokeWidth = 3.dp)
-                            Text(
-                                text = "מזהה דוברים ומנתח שיח בבינה מלאכותית...",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = "מקטלג חתימות שמע מול פרופילי קול משובטים...",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                            )
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    CircularProgressIndicator(
+                                        color = MaterialTheme.colorScheme.primary,
+                                        strokeWidth = 3.dp,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                    Column {
+                                        Text(
+                                            text = "זיהוי דוברים וניתוח שיח [AI] בעיצומו",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = "מנתח שיח רב-משתתפים בעזרת מודל Gemini",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                }
+                                
+                                LinearProgressIndicator(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(4.dp)
+                                        .clip(RoundedCornerShape(2.dp)),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                )
+                                
+                                Text(
+                                    text = steps[currentStep],
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     } else if (diarizationSegments.isEmpty()) {
                         // File loaded but not analyzed yet

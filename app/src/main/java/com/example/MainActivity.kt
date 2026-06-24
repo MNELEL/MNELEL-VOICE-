@@ -40,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.VoiceProfile
 import com.example.ui.AudioRecordingInterface
+import com.example.ui.SynthesisLoadingCard
 import com.example.ui.theme.*
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
@@ -2034,6 +2035,10 @@ fun VoiceProfileCard(
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("השמע עם TTS", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
+                    }
+
+                    if (isSynthesizing) {
+                        SynthesisLoadingCard()
                     }
 
                     // SWITCHER LIST OF RECENT CLONING HISTORY SAMPLES (Persistent Local State Storage)

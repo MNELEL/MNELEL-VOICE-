@@ -844,6 +844,10 @@ fun SpeechSynthesisScreen(
                     }
                 }
 
+                if (isSynthesizing) {
+                    SynthesisLoadingCard()
+                }
+
                 synthesizeError?.let { err ->
                     Text(text = err, color = MaterialTheme.colorScheme.error, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
@@ -2407,3 +2411,92 @@ fun SignatureSecurityHandshakeBanner(
         }
     }
 }
+
+@Composable
+fun SynthesisLoadingCard(
+    modifier: Modifier = Modifier
+) {
+    val stepText = remember {
+        listOf(
+            "מתחבר לשרת הענן המאובטח של ClassPro...",
+            "מנתח את הנימה הרטורית ואת סימני הפיסוק בטקסט...",
+            "מחלץ מאפייני דגימה וגוון קול ייחודיים מפרופיל המקור...",
+            "מפעיל את מנוע ה-AI של Gemini לסינתזת תדרים מדויקת...",
+            "מעבד ומשפר את תהודת השמע באמצעות אלגוריתמי סינון...",
+            "מסנכרן את קובץ ה-MP3 עם האחסון המקומי..."
+        )
+    }
+    var currentStepIdx by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(2200)
+            currentStepIdx = (currentStepIdx + 1) % stepText.size
+        }
+    }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp)
+            .testTag("synthesis_loading_card"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
+        ),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.primary,
+                    strokeWidth = 3.dp,
+                    modifier = Modifier.size(28.dp)
+                )
+                
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "סינתזת דיבור [Gemini AI] בעיצומה",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "פעולת העיבוד עשויה לקחת מספר שניות",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+            }
+            
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp)),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+            )
+            
+            Text(
+                text = stepText[currentStepIdx],
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
