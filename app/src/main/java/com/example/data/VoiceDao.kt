@@ -60,4 +60,16 @@ interface VoiceDao {
 
     @Query("DELETE FROM speech_diagnosis_reports")
     suspend fun deleteAllDiagnosisReports()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertQueueTask(task: DbQueueTask)
+
+    @Query("SELECT * FROM tts_queue_tasks ORDER BY createdAt ASC")
+    suspend fun getQueueTasks(): List<DbQueueTask>
+
+    @Query("DELETE FROM tts_queue_tasks WHERE id = :id")
+    suspend fun deleteQueueTaskById(id: String)
+
+    @Query("DELETE FROM tts_queue_tasks")
+    suspend fun clearAllQueueTasks()
 }

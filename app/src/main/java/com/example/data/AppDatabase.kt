@@ -6,8 +6,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [VoiceProfile::class, VoiceGenerationResult::class, VoiceStyleTemplate::class, SpeechDiagnosisReport::class],
-    version = 4,
+    entities = [VoiceProfile::class, VoiceGenerationResult::class, VoiceStyleTemplate::class, SpeechDiagnosisReport::class, DbQueueTask::class],
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

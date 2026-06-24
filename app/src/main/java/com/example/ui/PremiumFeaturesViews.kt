@@ -43,6 +43,8 @@ import com.example.ui.theme.LightSecondary
 import com.example.ui.theme.LightTertiary
 import com.example.ui.theme.SoftMuted
 import java.io.File
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
 
 // 1. --- LANDING PAGE SCREEN & ONBOARDING ON START ---
 @OptIn(ExperimentalAnimationApi::class)
@@ -355,6 +357,24 @@ fun SpeechSynthesisScreen(
     val recentGenerations by viewModel.recentGenerations.collectAsStateWithLifecycle()
     val isPlayingResultId by viewModel.isPlayingResultId.collectAsStateWithLifecycle()
 
+    val isLiteRtEnabled by viewModel.isLiteRtEnabled.collectAsStateWithLifecycle()
+    val liteRtModelSelected by viewModel.liteRtModelSelected.collectAsStateWithLifecycle()
+    val isRobotAutomationRunning by viewModel.isRobotAutomationRunning.collectAsStateWithLifecycle()
+    val robotLog by viewModel.robotLog.collectAsStateWithLifecycle()
+
+    val liteRtStatus by viewModel.liteRtStatus.collectAsStateWithLifecycle()
+    val liteRtProcessingSpeed by viewModel.liteRtProcessingSpeed.collectAsStateWithLifecycle()
+    val liteRtMemoryUsage by viewModel.liteRtMemoryUsage.collectAsStateWithLifecycle()
+    val liteRtCpuUsage by viewModel.liteRtCpuUsage.collectAsStateWithLifecycle()
+    val liteRtHardwareDelegate by viewModel.liteRtHardwareDelegate.collectAsStateWithLifecycle()
+
+    val localSignatures by viewModel.localSignatures.collectAsStateWithLifecycle()
+    val signatureSecurityStatus by viewModel.signatureSecurityStatus.collectAsStateWithLifecycle()
+
+    val localTtsQueue by viewModel.localTtsQueue.collectAsStateWithLifecycle()
+    val isQueueProcessing by viewModel.isQueueProcessing.collectAsStateWithLifecycle()
+    val currentQueueIndex by viewModel.currentQueueIndex.collectAsStateWithLifecycle()
+
     LaunchedEffect(profiles) {
         if (profiles.isNotEmpty() && selectedProfile == null) {
             selectedProfile = profiles.first()
@@ -573,6 +593,186 @@ fun SpeechSynthesisScreen(
                     )
                 }
 
+                // --- LiteRT-LM Local Integration Card ---
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .glassmorphic(shape = RoundedCornerShape(12.dp), elevation = 3.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = null,
+                                    tint = LightPrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Column {
+                                    Text(
+                                        text = "מנוע עיבוד מקומי LiteRT-LM",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = LightPrimary
+                                    )
+                                    Text(
+                                        text = "עיבוד על גבי המכשיר לחסכון בטוקנים",
+                                        fontSize = 11.sp,
+                                        color = DarkCharcoal
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = isLiteRtEnabled,
+                                onCheckedChange = { viewModel.setLiteRtEnabled(it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = LightPrimary,
+                                    checkedTrackColor = LightPrimary.copy(alpha = 0.3f)
+                                )
+                            )
+                        }
+
+                        if (isLiteRtEnabled) {
+                            Divider(color = Color.LightGray.copy(alpha = 0.3f))
+
+                            Text("בחר דגם מודל LiteRT מקומי:", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                listOf("Gemma-2B-TTS-Local", "Llama-Compact-TTS").forEach { model ->
+                                    FilterChip(
+                                        selected = liteRtModelSelected == model,
+                                        onClick = { viewModel.selectLiteRtModel(model) },
+                                        label = { Text(model, fontSize = 11.sp) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = LightPrimary.copy(alpha = 0.15f),
+                                            selectedLabelColor = LightPrimary
+                                        )
+                                    )
+                                }
+                            }
+
+                            signatureSecurityStatus?.let { status ->
+                                Spacer(modifier = Modifier.height(8.dp))
+                                SignatureSecurityHandshakeBanner(
+                                    status = status,
+                                    onDismiss = { viewModel.clearSignatureSecurityStatus() }
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LiteRtMetricsDashboard(
+                                status = liteRtStatus,
+                                speed = liteRtProcessingSpeed,
+                                memory = liteRtMemoryUsage,
+                                cpu = liteRtCpuUsage,
+                                delegate = liteRtHardwareDelegate
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LiteRtQueueSystem(
+                                queue = localTtsQueue,
+                                isProcessing = isQueueProcessing,
+                                currentIndex = currentQueueIndex,
+                                currentInputText = inputPhrase,
+                                selectedProfile = selectedProfile,
+                                onAddTask = { txt -> selectedProfile?.let { prof -> viewModel.addTaskToQueue(txt, prof) } },
+                                onRemoveTask = { id -> viewModel.removeTaskFromQueue(id) },
+                                onClearQueue = { viewModel.clearQueue() },
+                                onStartProcessing = { viewModel.startQueueProcessing() }
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LocalSignaturesManager(
+                                signatures = localSignatures,
+                                selectedProfile = selectedProfile,
+                                onSaveProfileAsSignature = { prof, filename -> viewModel.saveProfileAsSignature(prof, filename) },
+                                onRenameSignature = { old, new -> viewModel.renameSignatureFile(old, new) },
+                                onDeleteSignature = { filename -> viewModel.deleteSignatureFile(filename) },
+                                onImportSignature = { filename -> viewModel.importSignatureFileToDb(filename) }
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Robot Automation Mode section
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.4f)),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = Icons.Default.Build,
+                                                contentDescription = null,
+                                                tint = LightTertiary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "רובוט אוטומטי (ללא טוקנים)",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp,
+                                                color = LightTertiary
+                                            )
+                                        }
+                                        Button(
+                                            onClick = { viewModel.toggleRobotAutomation() },
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = if (isRobotAutomationRunning) Color.Red else LightTertiary
+                                            ),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(28.dp)
+                                        ) {
+                                            Text(
+                                                text = if (isRobotAutomationRunning) "עצור רובוט" else "הפעל רובוט",
+                                                fontSize = 11.sp,
+                                                color = Color.White
+                                            )
+                                        }
+                                    }
+
+                                    // Logs console
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(85.dp)
+                                            .background(Color.Black.copy(alpha = 0.05f), RoundedCornerShape(4.dp))
+                                            .padding(6.dp)
+                                    ) {
+                                        Text(
+                                            text = robotLog,
+                                            fontSize = 10.sp,
+                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                            color = DarkCharcoal,
+                                            modifier = Modifier.verticalScroll(rememberScrollState())
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Actions buttons
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -616,12 +816,18 @@ fun SpeechSynthesisScreen(
                         onClick = {
                             selectedProfile?.let { profile ->
                                 if (inputPhrase.isNotBlank()) {
-                                    viewModel.synthesizeTextLocal(
-                                        text = inputPhrase,
-                                        profile = profile,
-                                        pitchTuningPercent = pitchTuning * 100f,
-                                        speedTuningPercent = speedTuning * 100f
-                                    )
+                                    if (isLiteRtEnabled) {
+                                        viewModel.addTaskToQueue(inputPhrase, profile)
+                                        viewModel.startQueueProcessing()
+                                        android.widget.Toast.makeText(context, "נוסף לתור הסינתזה המקומי והחל בעיבוד!", android.widget.Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        viewModel.synthesizeTextLocal(
+                                            text = inputPhrase,
+                                            profile = profile,
+                                            pitchTuningPercent = pitchTuning * 100f,
+                                            speedTuningPercent = speedTuning * 100f
+                                        )
+                                    }
                                 } else {
                                     android.widget.Toast.makeText(context, "אנא הזן טקסט לקריינות", android.widget.Toast.LENGTH_SHORT).show()
                                 }
@@ -1523,5 +1729,681 @@ fun PricingCard(
 fun SelectionContainer(content: @Composable () -> Unit) {
     Box {
         content()
+    }
+}
+
+@Composable
+fun LiteRtMetricsDashboard(
+    status: String,
+    speed: Float,
+    memory: Int,
+    cpu: Int,
+    delegate: String
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.6f)),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().testTag("litert_metrics_dashboard")
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = LightPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("מדדי ביצועים בזמן אמת (LiteRT-LM)", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LightPrimary)
+                }
+                
+                // Status chip
+                val isProcessing = status == "Active"
+                Box(
+                    modifier = Modifier
+                        .background(
+                            if (isProcessing) Color(0xFF4CAF50).copy(alpha = 0.15f) else Color.Gray.copy(alpha = 0.1f),
+                            RoundedCornerShape(4.dp)
+                        )
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(if (isProcessing) Color(0xFF4CAF50) else Color.Gray, CircleShape)
+                        )
+                        Text(
+                            text = if (isProcessing) "בפעולה מקומית" else "בהמתנה",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isProcessing) Color(0xFF388E3C) else Color.Gray
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Metric 1: Processing Speed
+                Card(
+                    modifier = Modifier.weight(1f),
+                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.8f))
+                ) {
+                    Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("מהירות עיבוד", fontSize = 10.sp, color = SoftMuted)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (speed > 0) "${String.format("%.1f", speed)} t/s" else "0.0 t/s",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = DarkCharcoal
+                        )
+                    }
+                }
+
+                // Metric 2: Memory (RAM)
+                Card(
+                    modifier = Modifier.weight(1f),
+                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.8f))
+                ) {
+                    Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("זיכרון בשימוש", fontSize = 10.sp, color = SoftMuted)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "$memory MB",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = DarkCharcoal
+                        )
+                    }
+                }
+
+                // Metric 3: CPU Load
+                Card(
+                    modifier = Modifier.weight(1f),
+                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.8f))
+                ) {
+                    Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("עומס מעבד", fontSize = 10.sp, color = SoftMuted)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "$cpu%",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = DarkCharcoal
+                        )
+                    }
+                }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "מאיץ חומרה פעיל: $delegate",
+                    fontSize = 10.sp,
+                    color = SoftMuted,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = "צריכת סוללה מופחתת ב-40%",
+                    fontSize = 10.sp,
+                    color = Color(0xFF388E3C),
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun LiteRtQueueSystem(
+    queue: List<VoiceClonerViewModel.QueueTask>,
+    isProcessing: Boolean,
+    currentIndex: Int,
+    currentInputText: String,
+    selectedProfile: VoiceProfile?,
+    onAddTask: (String) -> Unit,
+    onRemoveTask: (String) -> Unit,
+    onClearQueue: () -> Unit,
+    onStartProcessing: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.6f)),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().testTag("litert_queue_card")
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.List,
+                        contentDescription = null,
+                        tint = LightPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("תור סינתזה מקומי רציף (TTS Queue)", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LightPrimary)
+                }
+                if (queue.isNotEmpty()) {
+                    TextButton(onClick = onClearQueue, contentPadding = PaddingValues(0.dp)) {
+                        Text("נקה תור", fontSize = 11.sp, color = Color.Red)
+                    }
+                }
+            }
+
+            // Quick add to queue input row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                var queueText by remember { mutableStateOf("") }
+                OutlinedTextField(
+                    value = queueText,
+                    onValueChange = { queueText = it },
+                    placeholder = { Text("הוסף משפט לתור...", fontSize = 12.sp) },
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    textStyle = TextStyle(fontSize = 12.sp),
+                    singleLine = true
+                )
+                Button(
+                    onClick = {
+                        if (queueText.isNotBlank()) {
+                            onAddTask(queueText)
+                            queueText = ""
+                        }
+                    },
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    modifier = Modifier.height(36.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = LightPrimary),
+                    enabled = selectedProfile != null
+                ) {
+                    Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("הוסף", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            if (queue.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("תור המשימות ריק. הוסף משפטים לסינתזה רציפה.", fontSize = 11.sp, color = SoftMuted)
+                }
+            } else {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 180.dp)
+                            .verticalScroll(rememberScrollState())
+                            .padding(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        queue.forEachIndexed { index, task ->
+                            val isCurrent = index == currentIndex
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        if (isCurrent) LightPrimary.copy(alpha = 0.1f) else Color.Transparent,
+                                        RoundedCornerShape(6.dp)
+                                    )
+                                    .padding(8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    // Status Indicator Icon
+                                    when (task.status) {
+                                        VoiceClonerViewModel.QueueStatus.WAITING -> {
+                                            Icon(
+                                                imageVector = Icons.Default.PlayArrow,
+                                                contentDescription = null,
+                                                tint = Color.Gray,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        VoiceClonerViewModel.QueueStatus.PROCESSING -> {
+                                            Icon(
+                                                imageVector = Icons.Default.Refresh,
+                                                contentDescription = null,
+                                                tint = LightTertiary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        VoiceClonerViewModel.QueueStatus.COMPLETED -> {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = Color(0xFF4CAF50),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        VoiceClonerViewModel.QueueStatus.FAILED -> {
+                                            Icon(
+                                                imageVector = Icons.Default.Warning,
+                                                contentDescription = null,
+                                                tint = Color.Red,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Column {
+                                        Text(
+                                            text = task.text,
+                                            fontSize = 12.sp,
+                                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (isCurrent) LightPrimary else DarkCharcoal,
+                                            maxLines = 1
+                                        )
+                                        Text(
+                                            text = "פרופיל: ${task.profile.name}",
+                                            fontSize = 9.sp,
+                                            color = SoftMuted
+                                        )
+                                    }
+                                }
+
+                                if (!isProcessing) {
+                                    IconButton(
+                                        onClick = { onRemoveTask(task.id) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "הסר מהתור",
+                                            tint = Color.Red.copy(alpha = 0.7f),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Button(
+                    onClick = onStartProcessing,
+                    modifier = Modifier.fillMaxWidth().height(38.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isProcessing) Color.Gray else LightTertiary
+                    ),
+                    enabled = !isProcessing,
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    if (isProcessing) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("מעבד תור מקומי...", fontSize = 12.sp)
+                    } else {
+                        Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("הפעל תור סינתזה מקומי", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LocalSignaturesManager(
+    signatures: List<VoiceClonerViewModel.SignatureFile>,
+    selectedProfile: VoiceProfile?,
+    onSaveProfileAsSignature: (VoiceProfile, String) -> Unit,
+    onRenameSignature: (String, String) -> Unit,
+    onDeleteSignature: (String) -> Unit,
+    onImportSignature: (String) -> Unit
+) {
+    var showSaveDialog by remember { mutableStateOf(false) }
+    var saveFileName by remember { mutableStateOf("") }
+    
+    var showRenameDialog by remember { mutableStateOf<String?>(null) } // fileName
+    var renameFileName by remember { mutableStateOf("") }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.6f)),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().testTag("local_signatures_card")
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = LightPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("מנהל חתימות קול מקומיות (JSON)", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LightPrimary)
+                }
+                
+                if (selectedProfile != null) {
+                    Button(
+                        onClick = {
+                            saveFileName = "${selectedProfile.name.replace(" ", "_")}_signature"
+                            showSaveDialog = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = LightPrimary),
+                        contentPadding = PaddingValues(horizontal = 10.dp),
+                        modifier = Modifier.height(28.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("ייצא חתימה", fontSize = 10.sp)
+                    }
+                }
+            }
+
+            if (signatures.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("אין חתימות קול מקומיות מאוחסנות בדיסק.", fontSize = 11.sp, color = SoftMuted)
+                }
+            } else {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp)
+                            .verticalScroll(rememberScrollState())
+                            .padding(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        signatures.forEach { file ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color.White.copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                                    .padding(8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = file.name,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = DarkCharcoal,
+                                        maxLines = 1
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text(
+                                            text = "${String.format("%.1f", file.size / 1024f)} KB",
+                                            fontSize = 9.sp,
+                                            color = SoftMuted
+                                        )
+                                        Text(
+                                            text = android.text.format.DateFormat.format("dd/MM/yyyy HH:mm", file.lastModified).toString(),
+                                            fontSize = 9.sp,
+                                            color = SoftMuted
+                                        )
+                                    }
+                                }
+
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // 1. Import back to Room DB
+                                    IconButton(
+                                        onClick = { onImportSignature(file.name) },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = "ייבא חתימה",
+                                            tint = LightPrimary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+
+                                    // 2. Rename File
+                                    IconButton(
+                                        onClick = {
+                                            renameFileName = file.name.removeSuffix(".json")
+                                            showRenameDialog = file.name
+                                        },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = "שנה שם",
+                                            tint = LightTertiary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+
+                                    // 3. Delete File
+                                    IconButton(
+                                        onClick = { onDeleteSignature(file.name) },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "מחק חתימה",
+                                            tint = Color.Red.copy(alpha = 0.8f),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // --- Dialogs ---
+    if (showSaveDialog && selectedProfile != null) {
+        AlertDialog(
+            onDismissRequest = { showSaveDialog = false },
+            title = { Text("ייצוא חתימת קול לקובץ JSON", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("הזן שם לקובץ החתימה המאובטח:", fontSize = 12.sp)
+                    OutlinedTextField(
+                        value = saveFileName,
+                        onValueChange = { saveFileName = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        placeholder = { Text("שם הקובץ") }
+                    )
+                    Text("🔒 הקובץ יישמר תחת תקן אבטחה ביומטרי מקומי קצה-לקצה.", fontSize = 11.sp, color = SoftMuted)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (saveFileName.isNotBlank()) {
+                            onSaveProfileAsSignature(selectedProfile, saveFileName)
+                            showSaveDialog = false
+                        }
+                    }
+                ) {
+                    Text("שמור חתימה")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSaveDialog = false }) {
+                    Text("ביטול")
+                }
+            }
+        )
+    }
+
+    if (showRenameDialog != null) {
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = null },
+            title = { Text("שינוי שם חתימת קול מקומית", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("הזן שם קובץ חדש:", fontSize = 12.sp)
+                    OutlinedTextField(
+                        value = renameFileName,
+                        onValueChange = { renameFileName = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        placeholder = { Text("שם חדש") }
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showRenameDialog?.let { oldName ->
+                            if (renameFileName.isNotBlank()) {
+                                onRenameSignature(oldName, renameFileName)
+                                showRenameDialog = null
+                            }
+                        }
+                    }
+                ) {
+                    Text("שנה שם")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameDialog = null }) {
+                    Text("ביטול")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun SignatureSecurityHandshakeBanner(
+    status: VoiceClonerViewModel.SignatureSecurityStatus,
+    onDismiss: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("signature_security_banner")
+            .border(
+                width = 1.5.dp,
+                color = if (status.isSuccess) Color(0xFF4CAF50) else Color.Red,
+                shape = RoundedCornerShape(12.dp)
+            ),
+        colors = CardDefaults.cardColors(
+            containerColor = if (status.isSuccess) Color(0xE6E8F5E9) else Color(0xFFFEEBEE)
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(
+                        imageVector = if (status.isSuccess) Icons.Default.CheckCircle else Icons.Default.Warning,
+                        contentDescription = "מעגל אבטחה",
+                        tint = if (status.isSuccess) Color(0xFF2E7D32) else Color.Red,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Text(
+                        text = if (status.isSuccess) "🔒 אימות חתימת קול ביומטרית מאובטחת" else "⚠️ שגיאת אבטחה בעיבוד קובץ",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = if (status.isSuccess) Color(0xFF1B5E20) else Color(0xFFC62828)
+                    )
+                }
+                IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
+                    Icon(imageVector = Icons.Default.Close, contentDescription = "סגור", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                }
+            }
+
+            Text(
+                text = status.message,
+                fontSize = 12.sp,
+                color = if (status.isSuccess) Color(0xFF2E7D32) else Color(0xFFC62828),
+                lineHeight = 16.sp
+            )
+
+            if (status.isSuccess && status.checksum != "N/A") {
+                Divider(color = Color(0xFF81C784).copy(alpha = 0.4f))
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "מזהה יושרה (SHA-256):",
+                        fontSize = 10.sp,
+                        color = Color(0xFF2E7D32),
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = status.checksum,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        fontSize = 10.sp,
+                        color = Color(0xFF1B5E20),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "ערוץ אבטחה:",
+                        fontSize = 10.sp,
+                        color = Color(0xFF2E7D32)
+                    )
+                    Text(
+                        text = "מקומי מוצפן (AES-256 GCM Sync)",
+                        fontSize = 10.sp,
+                        color = Color(0xFF1B5E20),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
     }
 }

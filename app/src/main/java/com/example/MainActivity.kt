@@ -228,12 +228,13 @@ fun VoiceClonerAppScreen(
         )
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color.White, LightBg)))
-            .padding(16.dp)
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .background(Brush.verticalGradient(listOf(Color.White, LightBg)))
+                .padding(16.dp)
+        ) {
         // Rate Limit Global Notification
         val isWaitingForRateLimit by viewModel.isWaitingForRateLimit.collectAsStateWithLifecycle()
         val recoverySeconds by viewModel.rateLimitRecoverySeconds.collectAsStateWithLifecycle()
@@ -1604,7 +1605,12 @@ fun VoiceClonerAppScreen(
                 shape = RoundedCornerShape(16.dp)
             )
         }
+        LiteRtDiagnosticOverlay(
+            viewModel = viewModel,
+            modifier = Modifier.align(Alignment.BottomStart)
+        )
     }
+}
 
 @Composable
 fun VoiceProfileCard(
@@ -2932,4 +2938,300 @@ fun SettingsDialog(
         }
     )
 }
+
+@Composable
+fun LiteRtDiagnosticOverlay(
+    viewModel: VoiceClonerViewModel,
+    modifier: Modifier = Modifier
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+    val status by viewModel.liteRtStatus.collectAsStateWithLifecycle()
+    val speed by viewModel.liteRtProcessingSpeed.collectAsStateWithLifecycle()
+    val memory by viewModel.liteRtMemoryUsage.collectAsStateWithLifecycle()
+    val cpu by viewModel.liteRtCpuUsage.collectAsStateWithLifecycle()
+    val delegate by viewModel.liteRtHardwareDelegate.collectAsStateWithLifecycle()
+
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.BottomStart
+    ) {
+        if (!isExpanded) {
+            FloatingActionButton(
+                onClick = { isExpanded = true },
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier
+                    .padding(16.dp)
+                    .testTag("litert_diagnostic_fab")
+                    .size(56.dp),
+                shape = CircleShape
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Build,
+                        contentDescription = "מצב LiteRT",
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Text("אבחון", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        } else {
+            Card(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .fillMaxWidth(0.92f)
+                    .wrapContentHeight()
+                    .testTag("litert_diagnostic_card")
+                    .clickable(enabled = false) {},
+                elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "אבחון וניטור מנוע LiteRT-LM",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        IconButton(
+                            onClick = { isExpanded = false },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "סגור",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("סטטוס מנוע בזמן אמת:", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        
+                        val isProcessing = status == "Active"
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    if (isProcessing) Color(0xFF4CAF50).copy(alpha = 0.15f) else Color.Gray.copy(alpha = 0.1f),
+                                    RoundedCornerShape(6.dp)
+                                )
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .background(if (isProcessing) Color(0xFF4CAF50) else Color.Gray, CircleShape)
+                                )
+                                Text(
+                                    text = if (isProcessing) "בפעילות סינתזה" else "בהמתנה (Idle)",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isProcessing) Color(0xFF388E3C) else Color.Gray
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text("זמן שיהוי (Latency)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                val latencyVal = if (speed > 0) String.format("%.0f ms", 1000f / speed) else "0 ms"
+                                Text(latencyVal, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text("מהירות: ${String.format("%.1f", speed)} t/s", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text("ניצול זיכרון RAM", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("$memory MB", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                val memProgress = (memory / 256f).coerceIn(0f, 1f)
+                                LinearProgressIndicator(
+                                    progress = { memProgress },
+                                    color = if (memProgress > 0.7f) Color(0xFFE53935) else MaterialTheme.colorScheme.primary,
+                                    trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp))
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text("עומס מעבד (CPU)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("$cpu%", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                val cpuProgress = (cpu / 100f).coerceIn(0f, 1f)
+                                LinearProgressIndicator(
+                                    progress = { cpuProgress },
+                                    color = if (cpuProgress > 0.5f) Color(0xFFF57C00) else MaterialTheme.colorScheme.secondary,
+                                    trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp))
+                                )
+                            }
+                        }
+
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text("מאיץ חומרה", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(delegate, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, textAlign = TextAlign.Center)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(if (delegate.contains("GPU")) "מואץ חומרה ⚡" else "עיבוד תוכנתי 🐌", fontSize = 9.sp, color = if (delegate.contains("GPU")) Color(0xFF388E3C) else Color(0xFFD32F2F))
+                            }
+                        }
+                    }
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = when {
+                                delegate.contains("CPU") -> Color(0xFFFFF9C4).copy(alpha = 0.5f)
+                                memory > 180 -> Color(0xFFFFCDD2).copy(alpha = 0.4f)
+                                cpu > 50 -> Color(0xFFFFE0B2).copy(alpha = 0.4f)
+                                else -> Color(0xFFC8E6C9).copy(alpha = 0.3f)
+                            }
+                        ),
+                        border = BorderStroke(
+                            1.dp,
+                            when {
+                                delegate.contains("CPU") -> Color(0xFFFBC02D)
+                                memory > 180 -> Color(0xFFE53935)
+                                cpu > 50 -> Color(0xFFF57C00)
+                                else -> Color(0xFF81C784)
+                            }
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = when {
+                                    delegate.contains("CPU") -> "⚠️"
+                                    memory > 180 -> "🚨"
+                                    cpu > 50 -> "⚡"
+                                    else -> "✅"
+                                },
+                                fontSize = 18.sp
+                            )
+                            Column {
+                                Text(
+                                    text = when {
+                                        delegate.contains("CPU") -> "זוהה צוואר בקבוק: עיבוד במעבד (CPU)"
+                                        memory > 180 -> "זוהה צוואר בקבוק: צריכת זיכרון חריגה"
+                                        cpu > 50 -> "זוהה צוואר בקבוק: עומס מעבד חריג"
+                                        else -> "אופטימיזציה מלאה"
+                                    },
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = Color.Black
+                                )
+                                Text(
+                                    text = when {
+                                        delegate.contains("CPU") -> "החומרה אינה מואצת באמצעות מנגנון NNAPI של ה-GPU. מהירות הסינתזה עלולה לרדת. פתרון: ודא שהאצת חומרה מופעלת בהגדרות הכלליות."
+                                        memory > 180 -> "מודל ה-LiteRT-LM מנצל כמות זיכרון גבוהה ($memory MB). פתרון: מומלץ לסגור אפליקציות הפועלות ברקע כדי למנוע קריסה מונעת מה-OS."
+                                        cpu > 50 -> "עומס העיבוד המקומי גבוה מאוד ($cpu%). פתרון: הימנע מהרצת משימות סינתזה כבדות בו-זמנית ותן למכשיר להתקרר."
+                                        else -> "ביצועי מנוע ה-LiteRT-LM אופטימליים! חתימות הקול מעובדות במהירות מקסימלית על גבי המאיץ הגרפי ללא צווארי בקבוק."
+                                    },
+                                    fontSize = 10.sp,
+                                    color = Color.DarkGray
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { viewModel.startMetricsFluctuation() },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("הפעל בדיקת עומס (Stress Test)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        
+                        OutlinedButton(
+                            onClick = { isExpanded = false },
+                            modifier = Modifier.weight(0.4f)
+                        ) {
+                            Text("סגור", fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 
