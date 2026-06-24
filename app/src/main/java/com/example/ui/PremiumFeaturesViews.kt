@@ -45,6 +45,9 @@ import com.example.ui.theme.SoftMuted
 import java.io.File
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.isGranted
 
 // 1. --- LANDING PAGE SCREEN & ONBOARDING ON START ---
 @OptIn(ExperimentalAnimationApi::class)
@@ -297,6 +300,63 @@ fun FeatureRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: Str
     }
 }
 
+fun downloadAudioResult(
+    context: android.content.Context,
+    sourceFile: File,
+    displayName: String,
+    format: String, // "mp3" or "wav"
+    onResult: (Boolean, String) -> Unit
+) {
+    if (!sourceFile.exists()) {
+        onResult(false, "קובץ המקור אינו זמין")
+        return
+    }
+    try {
+        val resolver = context.contentResolver
+        val mimeType = if (format == "wav") "audio/wav" else "audio/mpeg"
+        val extension = if (format == "wav") ".wav" else ".mp3"
+        
+        val contentValues = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, "$displayName$extension")
+            put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mimeType)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+                put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+        }
+        
+        val uri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+        } else {
+            @Suppress("DEPRECATION")
+            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            if (!downloadsDir.exists()) downloadsDir.mkdirs()
+            val targetFile = File(downloadsDir, "$displayName$extension")
+            android.net.Uri.fromFile(targetFile)
+        }
+        
+        if (uri == null) {
+            onResult(false, "כשל ביצירת קובץ ה-MediaStore")
+            return
+        }
+        
+        resolver.openOutputStream(uri)?.use { output ->
+            sourceFile.inputStream().use { input ->
+                input.copyTo(output)
+            }
+        }
+        
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            contentValues.clear()
+            contentValues.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+            resolver.update(uri, contentValues, null, null)
+        }
+        
+        onResult(true, "הורדה הושלמה! הקובץ נשמר בתיקיית ההורדות בפורמט ${format.uppercase()}")
+    } catch (e: Exception) {
+        onResult(false, "שגיאה בייצוא: ${e.message}")
+    }
+}
 
 // 2. --- DYNAMIC TEXT SYNTHESIS PAGE (Equated to `/synthesize`) ---
 @OptIn(ExperimentalMaterial3Api::class)
@@ -375,6 +435,8 @@ fun SpeechSynthesisScreen(
     val isQueueProcessing by viewModel.isQueueProcessing.collectAsStateWithLifecycle()
     val currentQueueIndex by viewModel.currentQueueIndex.collectAsStateWithLifecycle()
 
+    var showFormatSelectorDialog by remember { mutableStateOf<com.example.data.VoiceGenerationResult?>(null) }
+
     LaunchedEffect(profiles) {
         if (profiles.isNotEmpty() && selectedProfile == null) {
             selectedProfile = profiles.first()
@@ -420,9 +482,28 @@ fun SpeechSynthesisScreen(
                     placeholder = { Text("למשל: 'בוקר טוב כיתה ג, היום נעבור על שיעור גגו של עולם...'") },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(110.dp),
+                        .height(110.dp)
+                        .testTag("synthesis_text_input"),
                     shape = RoundedCornerShape(12.dp)
                 )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = LightPrimary.copy(alpha = 0.7f),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "מנוע הדיבוב מבוסס על מודל Gemini לסינתזה טבעית ומדויקת להפליא.",
+                        fontSize = 11.sp,
+                        color = DarkCharcoal.copy(alpha = 0.7f)
+                    )
+                }
 
                 // 2.1 Profile selection dropdown
                 Text("בחר פרופיל קול משובט:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
@@ -700,7 +781,9 @@ fun SpeechSynthesisScreen(
                                 onSaveProfileAsSignature = { prof, filename -> viewModel.saveProfileAsSignature(prof, filename) },
                                 onRenameSignature = { old, new -> viewModel.renameSignatureFile(old, new) },
                                 onDeleteSignature = { filename -> viewModel.deleteSignatureFile(filename) },
-                                onImportSignature = { filename -> viewModel.importSignatureFileToDb(filename) }
+                                onImportSignature = { filename -> viewModel.importSignatureFileToDb(filename) },
+                                viewModel = viewModel,
+                                profiles = profiles
                             )
 
                             Spacer(modifier = Modifier.height(8.dp))
@@ -801,6 +884,7 @@ fun SpeechSynthesisScreen(
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp)
+                            .testTag("synthesis_generate_button")
                     ) {
                         if (isSynthesizing) {
                             CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
@@ -943,27 +1027,15 @@ fun SpeechSynthesisScreen(
 
                             OutlinedButton(
                                 onClick = {
-                                    try {
-                                        val sourceFile = File(result.audioPath)
-                                        if (sourceFile.exists()) {
-                                            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-                                            val destFile = File(downloadsDir, "VoiceCloner_Result_${result.id}.mp3")
-                                            sourceFile.copyTo(destFile, overwrite = true)
-                                            android.widget.Toast.makeText(context, "הקובץ יוצא בהצלחה כ-MP3 לתיקיית ההורדות!", android.widget.Toast.LENGTH_LONG).show()
-                                        } else {
-                                            android.widget.Toast.makeText(context, "שגיאה: קובץ המקור לא נמצא", android.widget.Toast.LENGTH_SHORT).show()
-                                        }
-                                    } catch (e: Exception) {
-                                        android.widget.Toast.makeText(context, "שגיאה בייצוא: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
-                                    }
+                                    showFormatSelectorDialog = result
                                 },
                                 shape = RoundedCornerShape(8.dp),
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f).testTag("export_audio_button")
                             ) {
                                 Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp), tint = DarkCharcoal)
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("ייצוא ל-MP3 💾", fontSize = 11.sp, color = DarkCharcoal)
+                                Text("ייצוא לקובץ שמע 💾", fontSize = 11.sp, color = DarkCharcoal)
                             }
 
                             IconButton(
@@ -995,6 +1067,136 @@ fun SpeechSynthesisScreen(
                     Text(driveMessage, fontSize = 12.sp, color = LightTertiary)
                 }
             }
+        }
+
+        // MP3/WAV Audio Format Export Selection Dialog
+        if (showFormatSelectorDialog != null) {
+            val result = showFormatSelectorDialog!!
+            AlertDialog(
+                onDismissRequest = { showFormatSelectorDialog = null },
+                title = { 
+                    Text(
+                        text = "ייצוא קובץ שמע 💾",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = LightPrimary
+                    )
+                },
+                text = {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "בחר את פורמט האודיו לייצוא ושמירה בתיקיית ההורדות של המכשיר:",
+                            fontSize = 13.sp,
+                            color = DarkCharcoal
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // MP3 Option Card
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showFormatSelectorDialog = null
+                                    downloadAudioResult(
+                                        context = context,
+                                        sourceFile = File(result.audioPath),
+                                        displayName = "משבט-קול-${result.profileName}-${result.id}",
+                                        format = "mp3"
+                                    ) { success, message ->
+                                        android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                                .testTag("export_mp3_card"),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f)
+                            ),
+                            border = BorderStroke(1.dp, LightPrimary.copy(alpha = 0.2f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = null,
+                                    tint = LightPrimary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Column {
+                                    Text(
+                                        text = "קובץ MP3 (דחוס, נפח קטן)",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = DarkCharcoal
+                                    )
+                                    Text(
+                                        text = "מעולה לשיתוף מהיר והאזנה ברוב הנגנים",
+                                        fontSize = 11.sp,
+                                        color = SoftMuted
+                                    )
+                                }
+                            }
+                        }
+
+                        // WAV Option Card
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showFormatSelectorDialog = null
+                                    downloadAudioResult(
+                                        context = context,
+                                        sourceFile = File(result.audioPath),
+                                        displayName = "משבט-קול-${result.profileName}-${result.id}",
+                                        format = "wav"
+                                    ) { success, message ->
+                                        android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                                .testTag("export_wav_card"),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.1f)
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Column {
+                                    Text(
+                                        text = "קובץ WAV (איכות גבוהה, ללא דחיסה)",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = DarkCharcoal
+                                    )
+                                    Text(
+                                        text = "מתאים לעריכה מקצועית ומערכות קול ייעודיות",
+                                        fontSize = 11.sp,
+                                        color = SoftMuted
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showFormatSelectorDialog = null }) {
+                        Text("ביטול", color = LightPrimary, fontWeight = FontWeight.Bold)
+                    }
+                }
+            )
         }
     }
 }
@@ -2079,6 +2281,7 @@ fun LiteRtQueueSystem(
     }
 }
 
+@OptIn(com.google.accompanist.permissions.ExperimentalPermissionsApi::class)
 @Composable
 fun LocalSignaturesManager(
     signatures: List<VoiceClonerViewModel.SignatureFile>,
@@ -2086,13 +2289,41 @@ fun LocalSignaturesManager(
     onSaveProfileAsSignature: (VoiceProfile, String) -> Unit,
     onRenameSignature: (String, String) -> Unit,
     onDeleteSignature: (String) -> Unit,
-    onImportSignature: (String) -> Unit
+    onImportSignature: (String) -> Unit,
+    viewModel: VoiceClonerViewModel? = null,
+    profiles: List<VoiceProfile> = emptyList()
 ) {
     var showSaveDialog by remember { mutableStateOf(false) }
     var saveFileName by remember { mutableStateOf("") }
     
     var showRenameDialog by remember { mutableStateOf<String?>(null) } // fileName
     var renameFileName by remember { mutableStateOf("") }
+
+    var isRecordingSignatureMode by remember { mutableStateOf(false) }
+    var signatureRecordName by remember { mutableStateOf("") }
+    var signatureRecordGender by remember { mutableStateOf("זכר") }
+
+    val isRecording = viewModel?.isRecording?.collectAsStateWithLifecycle()?.value ?: false
+    val isRecordingPaused = viewModel?.isRecordingPaused?.collectAsStateWithLifecycle()?.value ?: false
+    val recordingDurationSec = viewModel?.recordingDurationSec?.collectAsStateWithLifecycle()?.value ?: 0
+    val liveAmplitude = viewModel?.liveAmplitude?.collectAsStateWithLifecycle()?.value ?: 0f
+    val recordedFile = viewModel?.recordedFile?.collectAsStateWithLifecycle()?.value
+    val isAnalyzing = viewModel?.isAnalyzing?.collectAsStateWithLifecycle()?.value ?: false
+    val analysisError = viewModel?.analysisError?.collectAsStateWithLifecycle()?.value
+
+    var isWaitingForSignatureSave by remember { mutableStateOf(false) }
+    var expectedSignatureName by remember { mutableStateOf("") }
+
+    LaunchedEffect(isAnalyzing) {
+        if (!isAnalyzing && isWaitingForSignatureSave) {
+            val finalName = expectedSignatureName.ifBlank { "חתימת קול חדשה" }
+            val newProfile = profiles.find { it.name == finalName }
+            if (newProfile != null) {
+                onSaveProfileAsSignature(newProfile, "${finalName.replace(" ", "_")}_signature")
+            }
+            isWaitingForSignatureSave = false
+        }
+    }
 
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.6f)),
@@ -2105,7 +2336,7 @@ fun LocalSignaturesManager(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                     Icon(
                         imageVector = Icons.Default.Lock,
                         contentDescription = null,
@@ -2113,22 +2344,202 @@ fun LocalSignaturesManager(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("מנהל חתימות קול מקומיות (JSON)", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LightPrimary)
+                    Text(
+                        text = "מנהל חתימות קול מקומיות (JSON)",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = LightPrimary,
+                        maxLines = 1
+                    )
                 }
                 
-                if (selectedProfile != null) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Button to toggle Recording Section
                     Button(
-                        onClick = {
-                            saveFileName = "${selectedProfile.name.replace(" ", "_")}_signature"
-                            showSaveDialog = true
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = LightPrimary),
-                        contentPadding = PaddingValues(horizontal = 10.dp),
-                        modifier = Modifier.height(28.dp)
+                        onClick = { isRecordingSignatureMode = !isRecordingSignatureMode },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isRecordingSignatureMode) Color.Red.copy(alpha = 0.8f) else LightPrimary
+                        ),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
+                        modifier = Modifier.height(28.dp).testTag("toggle_signature_record_btn")
                     ) {
-                        Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Icon(
+                            imageVector = if (isRecordingSignatureMode) Icons.Default.Close else Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp)
+                        )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("ייצא חתימה", fontSize = 10.sp)
+                        Text(if (isRecordingSignatureMode) "סגור הקלטה" else "הקלט חתימה", fontSize = 10.sp)
+                    }
+
+                    if (selectedProfile != null && !isRecordingSignatureMode) {
+                        Button(
+                            onClick = {
+                                saveFileName = "${selectedProfile.name.replace(" ", "_")}_signature"
+                                showSaveDialog = true
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = LightPrimary),
+                            contentPadding = PaddingValues(horizontal = 8.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(12.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("ייצא חתימה", fontSize = 10.sp)
+                        }
+                    }
+                }
+            }
+
+            AnimatedVisibility(
+                visible = isRecordingSignatureMode,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                        .testTag("signature_recorder_section")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "🎙️ הקלטת חתימת קול ביומטרית חדשה",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = LightPrimary
+                        )
+
+                        Text(
+                            text = "הקלט דגימת קול של לפחות 5 שניות בסביבה שקטה. אנו ננתח את התדרים בבינה מלאכותית ונייצר עבורך חתימה דיגיטלית בפורמט JSON מאובטח.",
+                            fontSize = 11.sp,
+                            color = DarkCharcoal.copy(alpha = 0.8f)
+                        )
+
+                        // Signature Name input
+                        OutlinedTextField(
+                            value = signatureRecordName,
+                            onValueChange = { signatureRecordName = it },
+                            label = { Text("שם בעל חתימת הקול", fontSize = 12.sp) },
+                            placeholder = { Text("למשל: מורה אלי, גננת שרה...") },
+                            modifier = Modifier.fillMaxWidth().testTag("signature_name_input"),
+                            singleLine = true
+                        )
+
+                        // Gender picker
+                        Text("מגדר הדובר/ת:", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            listOf("זכר" to "👨 זכר", "נקבה" to "👩 נקבה").forEach { (valStr, label) ->
+                                val selected = signatureRecordGender == valStr
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = { signatureRecordGender = valStr },
+                                    label = { Text(label, fontSize = 11.sp) },
+                                    modifier = Modifier.testTag("signature_gender_$valStr")
+                                )
+                            }
+                        }
+
+                        // Microphone recorder with permission state
+                        val micPermissionState = com.google.accompanist.permissions.rememberPermissionState(android.Manifest.permission.RECORD_AUDIO)
+                        if (micPermissionState.status.isGranted) {
+                            AudioRecordingInterface(
+                                isRecording = isRecording,
+                                isPaused = isRecordingPaused,
+                                durationSec = recordingDurationSec,
+                                amplitude = liveAmplitude,
+                                onStart = { viewModel?.startRecordVoice() },
+                                onPause = { viewModel?.pauseRecordVoice() },
+                                onResume = { viewModel?.resumeRecordVoice() },
+                                onStop = { viewModel?.stopRecordVoice() },
+                                modifier = Modifier.testTag("signature_audio_recorder")
+                            )
+
+                            // AI Analysis & Generation Trigger
+                            if (recordedFile != null && recordingDurationSec >= 5) {
+                                Button(
+                                    onClick = {
+                                        expectedSignatureName = signatureRecordName.ifBlank { "חתימת קול חדשה" }
+                                        viewModel?.cloneAndAnalyze(
+                                            name = expectedSignatureName,
+                                            gender = signatureRecordGender,
+                                            description = "חתימת קול ביומטרית מותאמת אישית מתוך הקלטה ישירה"
+                                        )
+                                        isWaitingForSignatureSave = true
+                                    },
+                                    enabled = !isAnalyzing,
+                                    colors = ButtonDefaults.buttonColors(containerColor = LightPrimary),
+                                    modifier = Modifier.fillMaxWidth().height(44.dp).testTag("signature_create_ai_button")
+                                ) {
+                                    if (isAnalyzing) {
+                                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("יוצר חתימת קול ב-AI...", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    } else {
+                                        Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("נתח וצור חתימת קול ב-AI [Gemini]", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color.Red.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+                                    .border(BorderStroke(1.dp, Color.Red.copy(alpha = 0.2f)), RoundedCornerShape(8.dp))
+                                    .padding(12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text("⚠️ נדרשת הרשאת מיקרופון כדי להקליט חתימת קול", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Red)
+                                    Button(
+                                        onClick = { micPermissionState.launchPermissionRequest() },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.8f)),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                        modifier = Modifier.height(32.dp)
+                                    ) {
+                                        Text("בקש הרשאה למיקרופון", fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Local loading/error indicators inside the recorder
+                        if (isAnalyzing) {
+                            LinearProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(4.dp)
+                                    .clip(RoundedCornerShape(2.dp)),
+                                color = LightPrimary,
+                                trackColor = LightPrimary.copy(alpha = 0.1f)
+                            )
+                        }
+
+                        analysisError?.let { err ->
+                            Text(
+                                text = "שגיאה בסינתזה: $err",
+                                color = Color.Red,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 }
             }
