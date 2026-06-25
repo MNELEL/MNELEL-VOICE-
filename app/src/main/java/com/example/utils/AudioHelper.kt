@@ -214,6 +214,22 @@ class AudioHelper(private val context: Context) {
         }
     }
 
+    fun setPlaybackPitch(pitch: Float) {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                mediaPlayer?.apply {
+                    val wasPlaying = isPlaying
+                    playbackParams = playbackParams.setPitch(pitch)
+                    if (!wasPlaying) {
+                        pause()
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("AudioHelper", "Failed to set playback pitch: $pitch", e)
+        }
+    }
+
     // --- Base64 & Persistence Helpers ---
 
     fun saveFileToPersistentStorage(file: File, prefix: String): File? {

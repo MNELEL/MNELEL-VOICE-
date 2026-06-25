@@ -2384,6 +2384,7 @@ fun Html5AudioPlayer(
     val elapsed by viewModel.playbackElapsedText.collectAsStateWithLifecycle()
     val duration by viewModel.playbackDurationText.collectAsStateWithLifecycle()
     val speed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
+    val pitch by viewModel.playbackPitch.collectAsStateWithLifecycle()
     val isMuted by viewModel.isPlayerMuted.collectAsStateWithLifecycle()
     val trackTitle by viewModel.playerTrackTitle.collectAsStateWithLifecycle()
     
@@ -2600,17 +2601,33 @@ fun Html5AudioPlayer(
                     }
                 }
 
+                Text(
+                    text = "ערוך והתאם אישית",
+                    fontSize = 12.sp,
+                    color = Color.Gray,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Speed Control
                 Row(
-                    modifier = Modifier.weight(1f).padding(start = 12.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val formattedSpeed = String.format(java.util.Locale.US, "%.1fx", speed)
                     Text(
                         text = "קצב ניגון: $formattedSpeed",
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
-                        color = Color(0xFF5F6368)
+                        color = Color(0xFF5F6368),
+                        modifier = Modifier.width(90.dp)
                     )
                     Slider(
                         value = speed,
@@ -2621,6 +2638,34 @@ fun Html5AudioPlayer(
                         colors = SliderDefaults.colors(
                             thumbColor = Color(0xFF4285F4),
                             activeTrackColor = Color(0xFF4285F4),
+                            inactiveTrackColor = Color(0xFFDADCE0)
+                        )
+                    )
+                }
+
+                // Pitch Control
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val formattedPitch = String.format(java.util.Locale.US, "%.1fx", pitch)
+                    Text(
+                        text = "גובה צליל: $formattedPitch",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF5F6368),
+                        modifier = Modifier.width(90.dp)
+                    )
+                    Slider(
+                        value = pitch,
+                        onValueChange = { viewModel.setPlaybackPitch(it) },
+                        valueRange = 0.5f..2.0f,
+                        steps = 14,
+                        modifier = Modifier.weight(1f).height(24.dp),
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color(0xFF34A853),
+                            activeTrackColor = Color(0xFF34A853),
                             inactiveTrackColor = Color(0xFFDADCE0)
                         )
                     )

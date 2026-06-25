@@ -145,6 +145,9 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
     private val _playbackSpeed = MutableStateFlow(1.0f)
     val playbackSpeed: StateFlow<Float> = _playbackSpeed.asStateFlow()
 
+    private val _playbackPitch = MutableStateFlow(1.0f)
+    val playbackPitch: StateFlow<Float> = _playbackPitch.asStateFlow()
+
     private val _acousticPreset = MutableStateFlow("None") // "None", "Studio", "Room", "Hall", "Cathedral"
     val acousticPreset: StateFlow<String> = _acousticPreset.asStateFlow()
 
@@ -179,6 +182,11 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
     fun setPlaybackSpeed(speed: Float) {
         _playbackSpeed.value = speed
         audioHelper.setPlaybackSpeed(speed)
+    }
+
+    fun setPlaybackPitch(pitch: Float) {
+        _playbackPitch.value = pitch
+        audioHelper.setPlaybackPitch(pitch)
     }
 
     fun setAcousticPreset(preset: String) {
@@ -574,6 +582,7 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                 _playbackDurationText.value = "00:00"
             }
             audioHelper.setPlaybackSpeed(_playbackSpeed.value)
+            audioHelper.setPlaybackPitch(_playbackPitch.value)
             startPlaybackProgressTracker {
                 _isPlayingRecorded.value = false
             }
@@ -631,6 +640,7 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                     _playbackProgress.value = 0f
                 }
                 audioHelper.setPlaybackSpeed(_playbackSpeed.value)
+                audioHelper.setPlaybackPitch(_playbackPitch.value)
                 startPlaybackProgressTracker {
                     _isPlayingProfileId.value = null
                 }
@@ -658,6 +668,7 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                 _playbackProgress.value = 0f
             }
             audioHelper.setPlaybackSpeed(_playbackSpeed.value)
+            audioHelper.setPlaybackPitch(_playbackPitch.value)
             startPlaybackProgressTracker {
                 _isPlayingResultId.value = null
             }
