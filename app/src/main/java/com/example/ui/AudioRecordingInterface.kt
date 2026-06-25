@@ -49,6 +49,9 @@ fun AudioRecordingInterface(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
+    liveDecibels: Float = 20f,
+    isNoiseMonitoring: Boolean = false,
+    onToggleNoiseMonitoring: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -113,9 +116,18 @@ fun AudioRecordingInterface(
                 }
             }
 
+            // Decibel Meter Component
+            DecibelMeterComponent(
+                decibels = liveDecibels,
+                isMonitoring = isNoiseMonitoring,
+                isRecording = isRecording,
+                onToggleMonitor = onToggleNoiseMonitoring,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+
             // Audio Wave Visualizer Area
             RecordingWaveform(
-                isRecording = isRecording,
+                isRecording = isRecording || isNoiseMonitoring,
                 isPaused = isPaused,
                 amplitude = amplitude
             )
@@ -512,6 +524,161 @@ private fun RecordingWaveform(
                     Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)))
                     Text("שקט / עוצמה נמוכה 🤫", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun DecibelMeterComponent(
+    decibels: Float,
+    isMonitoring: Boolean,
+    isRecording: Boolean,
+    onToggleMonitor: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val animatedDb by animateFloatAsState(
+        targetValue = decibels,
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        label = "decibels"
+    )
+
+    val (color, statusText, description) = when {
+        animatedDb < 45f -> Triple(
+            Color(0xFF10B981), // Emerald green
+            "שקט מצוין",
+            "סביבה מעולה להקלטה נקייה מרעשים"
+        )
+        animatedDb < 60f -> Triple(
+            Color(0xFFF59E0B), // Amber yellow
+            "רעש רקע מתון",
+            "מומלץ לסגור חלונות או לעבור לחדר שקט"
+        )
+        else -> Triple(
+            Color(0xFFEF4444), // Crimson red
+            "רועש מדי ⚠️",
+            "רעש רקע חזק עלול לפגוע באיכות השיבוט"
+        )
+    }
+
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.3f)),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        tint = color,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "מד דציבלים ורעש סביבתי",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                if (!isRecording) {
+                    Button(
+                        onClick = onToggleMonitor,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isMonitoring) Color(0xFFEF4444) else MaterialTheme.colorScheme.primary
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text(
+                            text = if (isMonitoring) "הפסק בדיקה" else "בדיקת רעש רקע",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(color.copy(alpha = 0.15f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "מדידה פעילה בהקלטה",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = color
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Progress Level Bar
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(10.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+            ) {
+                val dbFraction = ((animatedDb - 20f) / 70f).coerceIn(0f, 1f)
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(dbFraction)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color(0xFF10B981),
+                                    Color(0xFFF59E0B),
+                                    Color(0xFFEF4444)
+                                )
+                            )
+                        )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Bottom detail text
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${animatedDb.toInt()} dB - $statusText",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    color = color
+                )
+
+                Text(
+                    text = description,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f).padding(start = 12.dp)
+                )
             }
         }
     }

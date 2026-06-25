@@ -104,6 +104,8 @@ fun VoiceClonerAppScreen(
     val isRecordingPaused by viewModel.isRecordingPaused.collectAsStateWithLifecycle()
     val recordingDurationSec by viewModel.recordingDurationSec.collectAsStateWithLifecycle()
     val liveAmplitude by viewModel.liveAmplitude.collectAsStateWithLifecycle()
+    val liveDecibels by viewModel.liveDecibels.collectAsStateWithLifecycle()
+    val isNoiseMonitoring by viewModel.isNoiseMonitoring.collectAsStateWithLifecycle()
     val clarityScore by viewModel.clarityScore.collectAsStateWithLifecycle()
     val overallQualityScore by viewModel.overallQualityScore.collectAsStateWithLifecycle()
     val qualityFeedback by viewModel.qualityFeedback.collectAsStateWithLifecycle()
@@ -567,7 +569,16 @@ fun VoiceClonerAppScreen(
                                         onStart = { viewModel.startRecordVoice() },
                                         onPause = { viewModel.pauseRecordVoice() },
                                         onResume = { viewModel.resumeRecordVoice() },
-                                        onStop = { viewModel.stopRecordVoice() }
+                                        onStop = { viewModel.stopRecordVoice() },
+                                        liveDecibels = liveDecibels,
+                                        isNoiseMonitoring = isNoiseMonitoring,
+                                        onToggleNoiseMonitoring = {
+                                            if (isNoiseMonitoring) {
+                                                viewModel.stopNoiseMonitoring()
+                                            } else {
+                                                viewModel.startNoiseMonitoring()
+                                            }
+                                        }
                                     )
                                     Spacer(modifier = Modifier.height(16.dp))
 

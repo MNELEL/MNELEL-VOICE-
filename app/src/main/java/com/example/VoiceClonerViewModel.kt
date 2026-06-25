@@ -258,6 +258,21 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
     private val _qualityFeedback = MutableStateFlow("התחל להקליט כדי לבחון את איכות השמע...")
     val qualityFeedback: StateFlow<String> = _qualityFeedback.asStateFlow()
 
+    private val _liveDecibels = MutableStateFlow(20f)
+    val liveDecibels: StateFlow<Float> = _liveDecibels.asStateFlow()
+
+    private val _isNoiseMonitoring = MutableStateFlow(false)
+    val isNoiseMonitoring: StateFlow<Boolean> = _isNoiseMonitoring.asStateFlow()
+
+    private var noiseMonitorJob: kotlinx.coroutines.Job? = null
+
+    fun calculateDecibels(amplitude: Float): Float {
+        val rawAmp = amplitude * 32768f
+        if (rawAmp <= 1f) return 20f
+        val db = 20f * kotlin.math.log10(rawAmp.toDouble()).toFloat()
+        return db.coerceIn(20f, 90f)
+    }
+
     private val amplitudeHistory = mutableListOf<Float>()
 
     private var recordingJob: kotlinx.coroutines.Job? = null
@@ -479,10 +494,14 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun startRecordVoice() {
+        if (_isNoiseMonitoring.value) {
+            stopNoiseMonitoring()
+        }
         _recordedFile.value = null
         _analysisError.value = null
         _recordingDurationSec.value = 0
         _liveAmplitude.value = 0f
+        _liveDecibels.value = 20f
         _isRecordingPaused.value = false
         amplitudeHistory.clear()
         _clarityScore.value = 0
@@ -505,10 +524,12 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                         val rawAmp = audioHelper.getMaxAmplitude()
                         val normalized = (rawAmp.toFloat() / 32768f).coerceIn(0f, 1f)
                         _liveAmplitude.value = normalized
+                        _liveDecibels.value = calculateDecibels(normalized)
                         amplitudeHistory.add(normalized)
                         updateQualityAnalysis()
                     } else {
                         _liveAmplitude.value = 0f
+                        _liveDecibels.value = 20f
                     }
                 }
             }
@@ -562,6 +583,39 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                 _recordedFile.value = lastRecordedFile
                 lastRecordedFile?.let { autoSaveDraft(it) }
             }
+        }
+    }
+
+    fun startNoiseMonitoring() {
+        if (_isRecording.value || _isNoiseMonitoring.value) return
+        _isNoiseMonitoring.value = true
+        _liveAmplitude.value = 0f
+        _liveDecibels.value = 20f
+        
+        lastRecordedFile = audioHelper.startRecording()
+        if (lastRecordedFile != null) {
+            noiseMonitorJob = viewModelScope.launch(Dispatchers.Main) {
+                while (_isNoiseMonitoring.value && !_isRecording.value) {
+                    kotlinx.coroutines.delay(100)
+                    val rawAmp = audioHelper.getMaxAmplitude()
+                    val normalized = (rawAmp.toFloat() / 32768f).coerceIn(0f, 1f)
+                    _liveAmplitude.value = normalized
+                    _liveDecibels.value = calculateDecibels(normalized)
+                }
+            }
+        }
+    }
+
+    fun stopNoiseMonitoring() {
+        if (_isNoiseMonitoring.value) {
+            _isNoiseMonitoring.value = false
+            noiseMonitorJob?.cancel()
+            noiseMonitorJob = null
+            audioHelper.stopRecording()
+            lastRecordedFile?.delete()
+            lastRecordedFile = null
+            _liveAmplitude.value = 0f
+            _liveDecibels.value = 20f
         }
     }
 
