@@ -30,8 +30,8 @@
     ]
   },
   "versioning": {
-    "current_version_code": 12,
-    "current_version_name": "11.1",
+    "current_version_code": 15,
+    "current_version_name": "11.2",
     "whats_new": "Latest stability improvements, UI consistency fixes, and new export/sharing functionality."
   }
 }

@@ -35,6 +35,9 @@ interface VoiceDao {
     @Query("DELETE FROM voice_profiles WHERE id = :id")
     suspend fun deleteProfileById(id: Int)
 
+    @Query("UPDATE voice_profiles SET name = :newName WHERE id = :id")
+    suspend fun renameProfile(id: Int, newName: String)
+
     @Query("DELETE FROM voice_generation_results WHERE id = :id")
     suspend fun deleteGenerationResultById(id: Int)
 
@@ -72,4 +75,13 @@ interface VoiceDao {
 
     @Query("DELETE FROM tts_queue_tasks")
     suspend fun clearAllQueueTasks()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveDraft(draft: AudioDraft)
+
+    @Query("SELECT * FROM audio_drafts WHERE id = 'latest_draft'")
+    suspend fun getLatestDraft(): AudioDraft?
+
+    @Query("DELETE FROM audio_drafts WHERE id = 'latest_draft'")
+    suspend fun clearDraft()
 }

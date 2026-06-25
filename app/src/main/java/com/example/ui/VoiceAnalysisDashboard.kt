@@ -331,133 +331,18 @@ fun PhoneticAccuracyTabContent(profile: VoiceProfile) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(210.dp)
                 .background(Color.White, RoundedCornerShape(12.dp))
                 .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
                 .padding(8.dp),
             contentAlignment = Alignment.Center
         ) {
-            val primaryColor = MaterialTheme.colorScheme.primary
-            val secondaryColor = MaterialTheme.colorScheme.secondary
-
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val width = size.width
-                val height = size.height
-                val center = Offset(width / 2f, height / 2f)
-                val maxRadius = (size.minDimension * 0.4f).coerceIn(10f, 90.dp.toPx())
-
-                // 1. Draw web grid levels (concentric pentagons)
-                val levels = 5
-                val numSides = 5
-
-                // Metric indices and labels:
-                // 0: דיוק פונטי (profile.pronunciationClarity)
-                // 1: חיתוך דיבור (profile.clarityScore)
-                // 2: אינטונציה (profile.intonationScore)
-                // 3: סדירות נשימה (profile.breathPauseScore)
-                // 4: ניקיון אות (100 - profile.distortionLevel)
-                val labels = listOf("דיוק הברתי", "חיתוך קולי", "מנגינת דיבור", "סדירות נשימה", "ניקיון מרעש")
-                val values = listOf(
-                    profile.pronunciationClarity.toFloat() / 100f,
-                    profile.clarityScore.toFloat() / 100f,
-                    profile.intonationScore.toFloat() / 100f,
-                    profile.breathPauseScore.toFloat() / 100f,
-                    ((100 - profile.distortionLevel).coerceIn(0, 100)).toFloat() / 100f
-                )
-
-                for (level in 1..levels) {
-                    val radius = maxRadius * (level.toFloat() / levels.toFloat())
-                    val gridPath = Path()
-                    for (i in 0 until numSides) {
-                        val angle = i * (2f * Math.PI / numSides) - Math.PI / 2f
-                        val x = center.x + radius * cos(angle).toFloat()
-                        val y = center.y + radius * sin(angle).toFloat()
-                        if (i == 0) gridPath.moveTo(x, y) else gridPath.lineTo(x, y)
-                    }
-                    gridPath.close()
-                    drawPath(
-                        path = gridPath,
-                        color = Color(0xFFF1F5F9),
-                        style = Stroke(width = 1.dp.toPx())
-                    )
-                }
-
-                // 2. Draw axis lines
-                for (i in 0 until numSides) {
-                    val angle = i * (2f * Math.PI / numSides) - Math.PI / 2f
-                    val outerX = center.x + maxRadius * cos(angle).toFloat()
-                    val outerY = center.y + maxRadius * sin(angle).toFloat()
-                    drawLine(
-                        color = Color(0xFFE2E8F0),
-                        start = center,
-                        end = Offset(outerX, outerY),
-                        strokeWidth = 1.dp.toPx()
-                    )
-
-                    // Draw labels
-                    val textAngle = angle
-                    // Offset text slightly further out
-                    val textDist = maxRadius + 14.dp.toPx()
-                    val labelX = center.x + textDist * cos(textAngle).toFloat() - 25.dp.toPx()
-                    val labelY = center.y + textDist * sin(textAngle).toFloat() - 6.dp.toPx()
-
-                    drawText(
-                        textMeasurer = textMeasurer,
-                        text = labels[i],
-                        style = TextStyle(
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF64748B)
-                        ),
-                        topLeft = Offset(labelX, labelY)
-                    )
-                }
-
-                // 3. Draw voice profile data polygon
-                val dataPath = Path()
-                val points = mutableListOf<Offset>()
-                for (i in 0 until numSides) {
-                    val angle = i * (2f * Math.PI / numSides) - Math.PI / 2f
-                    val ratio = values[i].coerceIn(0.1f, 1f)
-                    val r = maxRadius * ratio
-                    val x = center.x + r * cos(angle).toFloat()
-                    val y = center.y + r * sin(angle).toFloat()
-                    points.add(Offset(x, y))
-                    if (i == 0) dataPath.moveTo(x, y) else dataPath.lineTo(x, y)
-                }
-                dataPath.close()
-
-                // Fill polygon with a translucent primary gradient
-                drawPath(
-                    path = dataPath,
-                    brush = Brush.radialGradient(
-                        colors = listOf(primaryColor.copy(alpha = 0.45f), secondaryColor.copy(alpha = 0.2f)),
-                        center = center,
-                        radius = maxRadius
-                    )
-                )
-
-                // Outline polygon
-                drawPath(
-                    path = dataPath,
-                    color = primaryColor,
-                    style = Stroke(width = 2.dp.toPx())
-                )
-
-                // Draw dots at vertices
-                points.forEach { pt ->
-                    drawCircle(
-                        color = secondaryColor,
-                        radius = 4.dp.toPx(),
-                        center = pt
-                    )
-                    drawCircle(
-                        color = Color.White,
-                        radius = 2.dp.toPx(),
-                        center = pt
-                    )
-                }
-            }
+            VicoColumnChartImpl(
+                pronunciationClarity = profile.pronunciationClarity,
+                clarityScore = profile.clarityScore,
+                intonationScore = profile.intonationScore,
+                breathPauseScore = profile.breathPauseScore,
+                distortionLevel = profile.distortionLevel
+            )
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -529,173 +414,14 @@ fun PitchFrequencyTabContent(profile: VoiceProfile) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(180.dp)
                 .background(Color.White, RoundedCornerShape(12.dp))
                 .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
                 .padding(12.dp)
         ) {
-            val primaryColor = MaterialTheme.colorScheme.primary
-            val secondaryColor = MaterialTheme.colorScheme.secondary
-
-            Canvas(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectDragGestures(
-                            onDragStart = { offset -> hoverX = offset.x },
-                            onDragEnd = { hoverX = null },
-                            onDragCancel = { hoverX = null },
-                            onDrag = { change, _ -> hoverX = change.position.x }
-                        )
-                    }
-                    .pointerInput(Unit) {
-                        detectTapGestures(
-                            onPress = { offset ->
-                                hoverX = offset.x
-                                tryAwaitRelease()
-                                hoverX = null
-                            }
-                        )
-                    }
-            ) {
-                val width = size.width
-                val height = size.height
-
-                // 1. Draw modern grid overlay (dashed helper grid)
-                val gridRows = 4
-                val gridCols = 6
-                for (r in 1 until gridRows) {
-                    val y = height * (r.toFloat() / gridRows)
-                    drawLine(
-                        color = Color(0xFFF1F5F9),
-                        start = Offset(0f, y),
-                        end = Offset(width, y),
-                        strokeWidth = 1.dp.toPx()
-                    )
-                }
-                for (c in 1 until gridCols) {
-                    val x = width * (c.toFloat() / gridCols)
-                    drawLine(
-                        color = Color(0xFFF1F5F9),
-                        start = Offset(x, 0f),
-                        end = Offset(x, height),
-                        strokeWidth = 1.dp.toPx()
-                    )
-                }
-
-                // 2. Compute timeline pitch frequency data
-                val pointsCount = 40
-                val signalPoints = mutableListOf<Offset>()
-                val areaPath = Path()
-                
-                val baseFreq = profile.frequencyHz.toFloat()
-                val intonationFactor = profile.intonationScore.toFloat() / 100f
-                val baseCenterY = height * 0.5f
-
-                for (i in 0..pointsCount) {
-                    val progress = i.toFloat() / pointsCount
-                    val x = progress * width
-                    // Generate logical voice variations over time
-                    val waveAngle = progress * 2f * Math.PI.toFloat()
-                    val variation = sin(waveAngle * 2) * 20f * intonationFactor + cos(waveAngle * 4) * 8f
-                    val yVal = (baseCenterY - (baseFreq - 150f) * 0.3f + variation).coerceIn(12.dp.toPx(), height - 20.dp.toPx())
-                    signalPoints.add(Offset(x, yVal))
-
-                    if (i == 0) {
-                        areaPath.moveTo(x, height)
-                        areaPath.lineTo(x, yVal)
-                    } else {
-                        areaPath.lineTo(x, yVal)
-                    }
-                }
-                areaPath.lineTo(width, height)
-                areaPath.close()
-
-                // Draw filled gradient area (Recharts aesthetic)
-                drawPath(
-                    path = areaPath,
-                    brush = Brush.verticalGradient(
-                        colors = listOf(primaryColor.copy(alpha = 0.25f), Color.Transparent)
-                    )
-                )
-
-                // Draw solid line
-                val linePath = Path()
-                signalPoints.forEachIndexed { idx, pt ->
-                    if (idx == 0) linePath.moveTo(pt.x, pt.y) else linePath.lineTo(pt.x, pt.y)
-                }
-                drawPath(
-                    path = linePath,
-                    color = primaryColor,
-                    style = Stroke(width = 2.5.dp.toPx())
-                )
-
-                // Draw user mean frequency baseline
-                drawLine(
-                    color = secondaryColor.copy(alpha = 0.35f),
-                    start = Offset(0f, baseCenterY - (baseFreq - 150f) * 0.3f),
-                    end = Offset(width, baseCenterY - (baseFreq - 150f) * 0.3f),
-                    strokeWidth = 1.dp.toPx(),
-                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 12f), 0f)
-                )
-
-                // 3. Render hover interaction state & dynamic tooltips
-                val currentHoverX = hoverX
-                if (currentHoverX != null) {
-                    val clampedHoverX = currentHoverX.coerceIn(0f, width)
-                    val ratioX = clampedHoverX / width
-                    val approximateIdx = (ratioX * pointsCount).toInt().coerceIn(0, pointsCount)
-                    val hoveredPoint = signalPoints[approximateIdx]
-
-                    // Vertical cursor guide
-                    drawLine(
-                        color = Color(0xFF94A3B8),
-                        start = Offset(hoveredPoint.x, 0f),
-                        end = Offset(hoveredPoint.x, height),
-                        strokeWidth = 1.dp.toPx()
-                    )
-
-                    // Target bubble dot highlight
-                    drawCircle(
-                        color = secondaryColor,
-                        radius = 6.dp.toPx(),
-                        center = hoveredPoint
-                    )
-                    drawCircle(
-                        color = Color.White,
-                        radius = 2.dp.toPx(),
-                        center = hoveredPoint
-                    )
-
-                    // Draw Recharts-style rich floating tooltip card
-                    // Calculate hz at this hover position
-                    val progressHz = baseFreq + (sin(approximateIdx.toFloat() * 0.2f) * 15f * intonationFactor)
-                    val labelText = "שניה: ${String.format("%.1f", ratioX * 5)}s | תדר: ${progressHz.toInt()} Hz"
-                    
-                    val textLayout = textMeasurer.measure(
-                        text = labelText,
-                        style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    )
-                    
-                    val bubbleW = textLayout.size.width + 16.dp.toPx()
-                    val bubbleH = textLayout.size.height + 10.dp.toPx()
-                    val bubbleX = (hoveredPoint.x - bubbleW / 2).coerceIn(4.dp.toPx(), width - bubbleW - 4.dp.toPx())
-                    val bubbleY = (hoveredPoint.y - bubbleH - 12.dp.toPx()).coerceAtLeast(4.dp.toPx())
-
-                    drawRoundRect(
-                        color = Color(0xFF0F172A).copy(alpha = 0.92f),
-                        topLeft = Offset(bubbleX, bubbleY),
-                        size = Size(bubbleW, bubbleH),
-                        cornerRadius = CornerRadius(6.dp.toPx(), 6.dp.toPx())
-                    )
-
-                    drawText(
-                        textMeasurer = textMeasurer,
-                        text = labelText,
-                        topLeft = Offset(bubbleX + 8.dp.toPx(), bubbleY + 5.dp.toPx())
-                    )
-                }
-            }
+            VicoLineChartImpl(
+                frequencyHz = profile.frequencyHz,
+                intonationScore = profile.intonationScore
+            )
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -1042,6 +768,24 @@ fun BulletText(text: String) {
     ) {
         Text(text = "•", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
         Text(text = text, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
+    }
+}
+
+@Composable
+fun AnimatedSidebar(
+    isVisible: Boolean,
+    profiles: List<VoiceProfile>,
+    onSelectProfile: (VoiceProfile) -> Unit
+) {
+    AnimatedVisibility(
+        visible = isVisible,
+        enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
+        exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut(),
+        modifier = Modifier.fillMaxHeight().width(250.dp)
+    ) {
+        Surface(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxHeight()) {
+            VoiceProfileGallery(profiles = profiles, onSelectProfile = onSelectProfile)
+        }
     }
 }
 
