@@ -82,7 +82,9 @@ fun VoiceClonerAppScreen(
     val isRecording by viewModel.isRecording.collectAsStateWithLifecycle()
     val recordedFile by viewModel.recordedFile.collectAsStateWithLifecycle()
     val isAnalyzing by viewModel.isAnalyzing.collectAsStateWithLifecycle()
+    val isGeminiAnalyzingAudio by viewModel.isGeminiAnalyzingAudio.collectAsStateWithLifecycle()
     val analysisError by viewModel.analysisError.collectAsStateWithLifecycle()
+    val audioAnalysisResult by viewModel.audioAnalysisResult.collectAsStateWithLifecycle()
     val isSynthesizing by viewModel.isSynthesizing.collectAsStateWithLifecycle()
     val synthesizeError by viewModel.synthesizeError.collectAsStateWithLifecycle()
     val isPlayingProfileId by viewModel.isPlayingProfileId.collectAsStateWithLifecycle()
@@ -98,6 +100,7 @@ fun VoiceClonerAppScreen(
     val isPlayingRecorded by viewModel.isPlayingRecorded.collectAsStateWithLifecycle()
     var isUploadMode by remember { mutableStateOf(false) }
     var showImportDialog by remember { mutableStateOf(false) }
+    var showAnalysisImportDialog by remember { mutableStateOf(false) }
     var showInfoModal by remember { mutableStateOf(false) }
     var importJsonText by remember { mutableStateOf("") }
 
@@ -437,40 +440,44 @@ fun VoiceClonerAppScreen(
             )
         }
 
-        // 6 Tab Navigation Header Row (Scrollable Tab Row)
-        ScrollableTabRow(
-            selectedTabIndex = currentTab,
-            edgePadding = 0.dp,
-            containerColor = Color.Transparent,
-            contentColor = LightPrimary,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp)
-        ) {
-            val tabs = listOf(
-                "בית ושיבוט קול 🎙️",
-                "סינתזת דיבור 🗣️",
-                "תבניות סגנון 🎭",
-                "תמלול מרובה דוברים 👥",
-                "אימון וכיול מרצים 🎓",
-                "נקודות ורכישה 💎",
-                "השוואת נתוני אבחון 📊",
-                "גלריית פרופילים 🖼️"
-            )
-            tabs.forEachIndexed { index, label ->
-                Tab(
-                    selected = currentTab == index,
-                    onClick = { currentTab = index },
-                    text = { Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
-                )
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-        ) {
+        Scaffold(
+            bottomBar = {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    tonalElevation = 8.dp
+                ) {
+                    val items = listOf(
+                        Triple("בית", Icons.Default.Home, 0),
+                        Triple("סינתזה", Icons.Default.PlayArrow, 1),
+                        Triple("כלים", Icons.Default.Build, 8),
+                        Triple("גלריה", Icons.Default.Person, 7)
+                    )
+                    items.forEach { item ->
+                        val isSelected = currentTab == item.third || (item.third == 8 && currentTab in 2..6)
+                        NavigationBarItem(
+                            icon = { Icon(item.second, contentDescription = item.first) },
+                            label = { Text(item.first, maxLines = 1, fontSize = 12.sp) },
+                            selected = isSelected,
+                            onClick = { 
+                                currentTab = item.third
+                            },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                indicatorColor = MaterialTheme.colorScheme.primary
+                            )
+                        )
+                    }
+                }
+            },
+            modifier = Modifier.weight(1f)
+        ) { innerScaffoldPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerScaffoldPadding)
+            ) {
             androidx.compose.animation.AnimatedContent(
                 targetState = currentTab,
                 transitionSpec = {
@@ -832,20 +839,116 @@ fun VoiceClonerAppScreen(
                                                     )
                                                 }
                                                 Spacer(modifier = Modifier.height(6.dp))
-                                                LinearProgressIndicator(
-                                                    progress = { if (isPlayingRecorded) playbackProgress else 0f },
+                                                Slider(
+                                                    value = if (isPlayingRecorded) playbackProgress else 0f,
+                                                    onValueChange = { newValue ->
+                                                        if (isPlayingRecorded) {
+                                                            viewModel.seekPlayback(newValue)
+                                                        }
+                                                    },
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .height(6.dp)
-                                                        .clip(RoundedCornerShape(3.dp)),
-                                                    color = MaterialTheme.colorScheme.primary,
-                                                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                                        .height(24.dp),
+                                                    colors = SliderDefaults.colors(
+                                                        thumbColor = MaterialTheme.colorScheme.primary,
+                                                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                                                        inactiveTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                                    )
                                                 )
                                             }
                                         }
                                     }
                                 }
 
+                                Spacer(modifier = Modifier.height(16.dp))
+                                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                // Gemini Audio Analysis Section
+                                Text(
+                                    text = "ניתוח אקוסטי מתקדם (Gemini AI)",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                if (isGeminiAnalyzingAudio) {
+                                    CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+                                } else {
+                                    Button(
+                                        onClick = { viewModel.analyzeAudioClip() },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                                    ) {
+                                        Text("נתח קובץ שמע באמצעות Gemini AI")
+                                    }
+                                }
+
+                                audioAnalysisResult?.let { result ->
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Column(modifier = Modifier.padding(16.dp)) {
+                                            Text("פרמטרים פונטיים:", fontWeight = FontWeight.Bold)
+                                            Text(result.phoneticParameters, fontSize = 14.sp)
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text("תדרי פיץ':", fontWeight = FontWeight.Bold)
+                                            Text(result.pitchFrequencies, fontSize = 14.sp)
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text("רמות רעש רקע:", fontWeight = FontWeight.Bold)
+                                            Text(result.backgroundNoiseLevels, fontSize = 14.sp)
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text("טביעת קול (Voice Print):", fontWeight = FontWeight.Bold)
+                                            Text(result.voicePrint, fontSize = 14.sp)
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text("עומק גרוני (Guttural Depth):", fontWeight = FontWeight.Bold)
+                                            Text(result.gutturalDepth, fontSize = 14.sp)
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text("חיתוך דיבור ודיקציה:", fontWeight = FontWeight.Bold)
+                                            Text(result.dictionAndClipping, fontSize = 14.sp)
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text("גוון קול וסגנון:", fontWeight = FontWeight.Bold)
+                                            Text(result.voiceToneAndStyle, fontSize = 14.sp)
+                                            Spacer(modifier = Modifier.height(12.dp))
+                                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                            Text(result.overallSummary, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
+                                            
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                OutlinedButton(
+                                                    onClick = { viewModel.exportAnalysisToJson(context) },
+                                                    modifier = Modifier.weight(1f).padding(end = 4.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("גיבוי נתונים ל-JSON", fontSize = 12.sp)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedButton(
+                                    onClick = { showAnalysisImportDialog = true },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("שחזר מנתוני גיבוי JSON", fontSize = 12.sp)
+                                }
+
+                                analysisError?.let { err ->
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(text = err, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
+                                }
+                                
                                 Spacer(modifier = Modifier.height(16.dp))
                                 HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
                                 Spacer(modifier = Modifier.height(16.dp))
@@ -1268,11 +1371,18 @@ fun VoiceClonerAppScreen(
             7 -> {
                 com.example.ui.VoiceProfileGallery(
                     profiles = profiles,
-                    onSelectProfile = { /* Handle selection (e.g. switch to current tab 0) */ }
+                    onSelectProfile = { /* Handle selection (e.g. switch to current tab 0) */ },
+                    onDeleteProfile = { viewModel.deleteProfile(it.id) },
+                    onRenameProfile = { profile, newName -> viewModel.renameProfile(profile.id, newName) },
+                    onExportProfile = { profile -> viewModel.exportProfileToJson(profile, context) }
                 )
+            }
+            8 -> {
+                ToolsDashboardScreen(onNavigate = { currentTab = it })
             }
         }
     }
+}
 }
 }
 
@@ -1330,6 +1440,59 @@ fun VoiceClonerAppScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { showImportDialog = false }) {
+                        Text("ביטול")
+                    }
+                },
+                shape = RoundedCornerShape(16.dp)
+            )
+        }
+
+        if (showAnalysisImportDialog) {
+            AlertDialog(
+                onDismissRequest = { showAnalysisImportDialog = false },
+                title = {
+                    Text(
+                        text = "שחזור נתוני ניתוח 📥",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "הדבק את קוד ה-JSON של האבחון הקולי:",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                        OutlinedTextField(
+                            value = importJsonText,
+                            onValueChange = { importJsonText = it },
+                            placeholder = { Text("הדבק כאן את התוכן...") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(160.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            maxLines = 10
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (importJsonText.isNotBlank()) {
+                                viewModel.importAnalysisFromJson(importJsonText)
+                                showAnalysisImportDialog = false
+                                importJsonText = ""
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Text("שחזר אבחון")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAnalysisImportDialog = false }) {
                         Text("ביטול")
                     }
                 },

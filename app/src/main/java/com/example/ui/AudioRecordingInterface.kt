@@ -12,7 +12,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -54,6 +56,35 @@ fun AudioRecordingInterface(
     onToggleNoiseMonitoring: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    var showGuidelinesDialog by remember { mutableStateOf(false) }
+
+    if (showGuidelinesDialog) {
+        AlertDialog(
+            onDismissRequest = { showGuidelinesDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(8.dp))
+                    Text("איך להקליט דגימה אופטימלית?", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("• הקלט בחדר שקט ללא רעשי רקע (מזגן, כביש, מאוורר).")
+                    Text("• דבר בצורה ברורה ובקצב טבעי.")
+                    Text("• שמור על מרחק אחיד מהמיקרופון (כ-15 ס\"מ).")
+                    Text("• הימנע מהדהוד (כגון חדרים ריקים גדולים).")
+                    Text("• מומלץ להקליט לפחות 15-30 שניות לקבלת פרופיל קול מדויק ויציב.")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showGuidelinesDialog = false }) {
+                    Text("הבנתי")
+                }
+            }
+        )
+    }
+
     Card(
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
@@ -69,13 +100,31 @@ fun AudioRecordingInterface(
                 .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Live Status Header
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(bottom = 16.dp)
+            // Live Status Header with Info Button
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
             ) {
-                if (isRecording) {
+                // Info Button
+                IconButton(
+                    onClick = { showGuidelinesDialog = true },
+                    modifier = Modifier.align(Alignment.CenterStart).size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info, 
+                        contentDescription = "הנחיות הקלטה", 
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                    )
+                }
+
+                // Live Status
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.align(Alignment.Center)
+                ) {
+                    if (isRecording) {
                     val pulseAlpha by rememberInfiniteTransition().animateFloat(
                         initialValue = 0.3f,
                         targetValue = 1f,
@@ -113,6 +162,49 @@ fun AudioRecordingInterface(
                         fontWeight = FontWeight.Bold,
                         color = Color.Gray
                     )
+                }
+            }
+        }
+
+            AnimatedVisibility(
+                visible = liveDecibels > 60f && (isRecording || isNoiseMonitoring),
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
+                    border = BorderStroke(1.dp, Color(0xFFEF4444)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = "אזהרה",
+                            tint = Color(0xFFD32F2F),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "אזהרה: סביבה רועשת מדי",
+                                color = Color(0xFFD32F2F),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                text = "רמת הרעש גבוהה ועלולה לפגוע בדיוק פרופיל הקול. אנא עבור לחדר שקט.",
+                                color = Color(0xFFD32F2F).copy(alpha = 0.8f),
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
                 }
             }
 

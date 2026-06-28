@@ -198,6 +198,14 @@ class AudioHelper(private val context: Context) {
         }
     }
 
+    fun seekTo(positionMs: Int) {
+        try {
+            mediaPlayer?.seekTo(positionMs)
+        } catch (e: Exception) {
+            Log.e("AudioHelper", "Failed to seek", e)
+        }
+    }
+
     fun setPlaybackSpeed(speed: Float) {
         try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {

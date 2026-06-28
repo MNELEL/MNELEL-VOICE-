@@ -475,35 +475,15 @@ fun SpeechSynthesisScreen(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("הקלד את הטקסט שידובב בקול המשובט:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                OutlinedTextField(
-                    value = inputPhrase,
-                    onValueChange = { inputPhrase = it },
-                    placeholder = { Text("למשל: 'בוקר טוב כיתה ג, היום נעבור על שיעור גגו של עולם...'") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(110.dp)
-                        .testTag("synthesis_text_input"),
-                    shape = RoundedCornerShape(12.dp)
-                )
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = null,
-                        tint = LightPrimary.copy(alpha = 0.7f),
-                        modifier = Modifier.size(14.dp)
+                // Use the new reusable component
+                selectedProfile?.let { profile ->
+                    SynthesizeVoiceComponent(
+                        viewModel = viewModel,
+                        profile = profile,
+                        inputPhrase = inputPhrase,
+                        onInputPhraseChange = { inputPhrase = it }
                     )
-                    Text(
-                        text = "מנוע הדיבוב מבוסס על מודל Gemini לסינתזה טבעית ומדויקת להפליא.",
-                        fontSize = 11.sp,
-                        color = DarkCharcoal.copy(alpha = 0.7f)
-                    )
-                }
+                } ?: Text("נא לבחור פרופיל קול כדי להתחיל בסינתזה", color = MaterialTheme.colorScheme.error)
 
                 // 2.1 Profile selection dropdown
                 Text("בחר פרופיל קול משובט:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
@@ -926,6 +906,34 @@ fun SpeechSynthesisScreen(
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("הקראה מקומית", color = LightTertiary)
                     }
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                OutlinedButton(
+                    onClick = {
+                        selectedProfile?.let { profile ->
+                            if (inputPhrase.isNotBlank()) {
+                                viewModel.exportAudioToWav(
+                                    text = inputPhrase,
+                                    profile = profile,
+                                    pitchTuningPercent = pitchTuning * 100f,
+                                    speedTuningPercent = speedTuning * 100f,
+                                    context = context
+                                )
+                            } else {
+                                android.widget.Toast.makeText(context, "אנא הזן טקסט לייצוא", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        } ?: android.widget.Toast.makeText(context, "אנא בחר פרופיל קול תחילה", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Share, contentDescription = null, tint = LightTertiary)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("ייצא שמע לקובץ (WAV)", color = LightTertiary)
                 }
 
                 if (isSynthesizing) {

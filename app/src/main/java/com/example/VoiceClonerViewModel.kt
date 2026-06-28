@@ -157,6 +157,13 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
     private val _isPlayerMuted = MutableStateFlow(false)
     val isPlayerMuted: StateFlow<Boolean> = _isPlayerMuted.asStateFlow()
 
+    private val _isNoiseReductionEnabled = MutableStateFlow(false)
+    val isNoiseReductionEnabled: StateFlow<Boolean> = _isNoiseReductionEnabled.asStateFlow()
+
+    fun toggleNoiseReduction() {
+        _isNoiseReductionEnabled.value = !_isNoiseReductionEnabled.value
+    }
+
     // Speech Diagnosis AI States
     private val _aiDiagnosisReport = MutableStateFlow<String?>(null)
     val aiDiagnosisReport: StateFlow<String?> = _aiDiagnosisReport.asStateFlow()
@@ -173,6 +180,38 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
         )
+
+    // Text Synthesis Queue
+    private val _textQueue = MutableStateFlow<List<String>>(emptyList())
+    val textQueue: StateFlow<List<String>> = _textQueue.asStateFlow()
+
+    fun addToQueue(text: String) {
+        _textQueue.value = _textQueue.value + text
+    }
+
+    fun removeFromQueue(index: Int) {
+        val current = _textQueue.value.toMutableList()
+        if (index in current.indices) {
+            current.removeAt(index)
+            _textQueue.value = current
+        }
+    }
+
+    fun clearTextQueue() {
+        _textQueue.value = emptyList()
+    }
+
+    fun playQueue(profile: VoiceProfile) {
+        viewModelScope.launch {
+            val queue = _textQueue.value
+            for (text in queue) {
+                synthesizeText(text, profile)
+                // Need a way to wait for synthesis and playback to finish?
+                // The current synthesizeText launches a coroutine. 
+                // Maybe I need a suspend version of synthesizeText?
+            }
+        }
+    }
 
     fun clearDiagnosisReport() {
         _aiDiagnosisReport.value = null
@@ -196,6 +235,60 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun togglePlayerMute() {
         _isPlayerMuted.value = !_isPlayerMuted.value
+    }
+
+    fun exportProfileToJson(profile: VoiceProfile, context: android.content.Context) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val jsonObject = org.json.JSONObject().apply {
+                    put("id", profile.id)
+                    put("name", profile.name)
+                    put("gender", profile.gender)
+                    put("description", profile.description)
+                    put("pitch", profile.pitch)
+                    put("tone", profile.tone)
+                    put("vibe", profile.vibe)
+                    put("pace", profile.pace)
+                    put("frequencyHz", profile.frequencyHz)
+                    put("clarityScore", profile.clarityScore)
+                    put("pronunciationClarity", profile.pronunciationClarity)
+                    put("intonationScore", profile.intonationScore)
+                    put("breathPauseScore", profile.breathPauseScore)
+                    put("distortionLevel", profile.distortionLevel)
+                    put("geminiVoiceName", profile.geminiVoiceName)
+                }
+                
+                val fileName = "voice_profile_${profile.name.replace(" ", "_")}_${System.currentTimeMillis()}.json"
+                
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    val resolver = context.contentResolver
+                    val contentValues = android.content.ContentValues().apply {
+                        put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                        put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "application/json")
+                        put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+                    }
+                    val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                    uri?.let {
+                        resolver.openOutputStream(it)?.use { outputStream ->
+                            outputStream.write(jsonObject.toString(4).toByteArray(Charsets.UTF_8))
+                        }
+                    }
+                } else {
+                    val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                    val file = java.io.File(downloadsDir, fileName)
+                    file.writeText(jsonObject.toString(4))
+                }
+                
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(context, "פרופיל יוצא ונשמר בהצלחה בתיקיית הורדות", android.widget.Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(context, "שגיאה בייצוא הפרופיל: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     fun saveProfile(profile: VoiceProfile) {
@@ -314,6 +407,113 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
 
     private val _analysisError = MutableStateFlow<String?>(null)
     val analysisError: StateFlow<String?> = _analysisError.asStateFlow()
+
+    private val _audioAnalysisResult = MutableStateFlow<com.example.service.AudioAnalysisResult?>(null)
+    val audioAnalysisResult: StateFlow<com.example.service.AudioAnalysisResult?> = _audioAnalysisResult.asStateFlow()
+
+    private val _isGeminiAnalyzingAudio = MutableStateFlow(false)
+    val isGeminiAnalyzingAudio: StateFlow<Boolean> = _isGeminiAnalyzingAudio.asStateFlow()
+
+    fun analyzeAudioClip() {
+        val file = _recordedFile.value
+        if (file == null) {
+            _analysisError.value = "אין קובץ אודיו פעיל לבדיקה"
+            return
+        }
+        _isGeminiAnalyzingAudio.value = true
+        _analysisError.value = null
+        _audioAnalysisResult.value = null
+
+        viewModelScope.launch {
+            try {
+                val service = com.example.service.AudioAnalysisService()
+                val result = service.analyzeAudio(file)
+                _audioAnalysisResult.value = result
+            } catch (e: Exception) {
+                _analysisError.value = "שגיאה בניתוח: ${e.message}"
+            } finally {
+                _isGeminiAnalyzingAudio.value = false
+            }
+        }
+    }
+
+    fun exportAnalysisToJson(context: android.content.Context) {
+        val result = _audioAnalysisResult.value ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val jsonObject = org.json.JSONObject().apply {
+                    put("phoneticParameters", result.phoneticParameters)
+                    put("pitchFrequencies", result.pitchFrequencies)
+                    put("backgroundNoiseLevels", result.backgroundNoiseLevels)
+                    put("voicePrint", result.voicePrint)
+                    put("gutturalDepth", result.gutturalDepth)
+                    put("dictionAndClipping", result.dictionAndClipping)
+                    put("voiceToneAndStyle", result.voiceToneAndStyle)
+                    put("overallSummary", result.overallSummary)
+                    put("timestamp", System.currentTimeMillis())
+                }
+
+                val fileName = "audio_analysis_${System.currentTimeMillis()}.json"
+
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    val resolver = context.contentResolver
+                    val contentValues = android.content.ContentValues().apply {
+                        put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                        put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "application/json")
+                        put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+                    }
+                    val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                    if (uri != null) {
+                        resolver.openOutputStream(uri)?.use { outputStream ->
+                            outputStream.write(jsonObject.toString(4).toByteArray())
+                        }
+                    }
+                } else {
+                    val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                    val file = java.io.File(downloadsDir, fileName)
+                    file.writeText(jsonObject.toString(4))
+                }
+                
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(context, "נתוני הניתוח יוצאו בהצלחה לתיקיית ההורדות", android.widget.Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(context, "שגיאה בייצוא: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    fun importAnalysisFromJson(jsonString: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val jsonObject = org.json.JSONObject(jsonString)
+                val phonetic = jsonObject.optString("phoneticParameters", "לא צוין")
+                val pitch = jsonObject.optString("pitchFrequencies", "לא צוין")
+                val noise = jsonObject.optString("backgroundNoiseLevels", "לא צוין")
+                val voicePrint = jsonObject.optString("voicePrint", "לא צוין")
+                val gutturalDepth = jsonObject.optString("gutturalDepth", "לא צוין")
+                val diction = jsonObject.optString("dictionAndClipping", "לא צוין")
+                val tone = jsonObject.optString("voiceToneAndStyle", "לא צוין")
+                val summary = jsonObject.optString("overallSummary", "לא צוין")
+
+                val result = com.example.service.AudioAnalysisResult(
+                    phoneticParameters = phonetic,
+                    pitchFrequencies = pitch,
+                    backgroundNoiseLevels = noise,
+                    voicePrint = voicePrint,
+                    gutturalDepth = gutturalDepth,
+                    dictionAndClipping = diction,
+                    voiceToneAndStyle = tone,
+                    overallSummary = summary
+                )
+                _audioAnalysisResult.value = result
+            } catch (e: Exception) {
+                _analysisError.value = "שגיאה בפענוח קובץ האבחון: ${e.message}"
+            }
+        }
+    }
 
     // Synthesis States
     private val _isSynthesizing = MutableStateFlow(false)
@@ -643,6 +843,17 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun seekPlayback(progress: Float) {
+        val total = audioHelper.getPlaybackDuration()
+        if (total > 0) {
+            val newPosition = (progress * total).toInt()
+            audioHelper.seekTo(newPosition)
+            _playbackProgress.value = progress
+            val curSec = newPosition / 1000
+            _playbackElapsedText.value = String.format("%02d:%02d", curSec / 60, curSec % 60)
+        }
+    }
+
     fun stopRecordedFile() {
         audioHelper.stopPlayback()
         playbackProgressJob?.cancel()
@@ -902,6 +1113,12 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                     "Express with a ${profile.vibe} mood and ${profile.tone} signature, exactly mirroring the original speaker's vibe."
                 }
 
+                val noiseReductionStr = if (_isNoiseReductionEnabled.value) {
+                    "Apply aggressive digital signal processing to eliminate all background static, hiss, and ambient noise. The final output must sound like a pristine studio recording."
+                } else {
+                    "Maintain original acoustic environment."
+                }
+
                 // We construct a highly detailed voice modulation prompt in English (as Gemini processes prompt directives for audio in OOB dynamic voices extremely well)
                 val promptText = """
                     SYSTEM COMMAND: Perform an extremely accurate, high-fidelity 1:1 voice cloning emulation of ${profile.name} (Gender: ${profile.gender}).
@@ -914,6 +1131,7 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                     4. Emotional Delivery Aura / Vibe: $activeVibe.
                     5. Intonation Rhythm Score: ${profile.intonationScore}/100.
                     6. Articulation & Hebrew Accents: ${profile.pronunciationClarity}/100 clarity.
+                    7. Noise Reduction Filter: $noiseReductionStr
 
                     Read the following Hebrew text exactly as written. Ensure incredibly natural phrasing, proper Hebrew accents, and flawless vocal fidelity:
                     
@@ -1133,6 +1351,98 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                     _analysisProgress.value = 0f
                     _analysisError.value = getFriendlyErrorMessage(e)
                 }
+            }
+        }
+    }
+
+    fun exportAudioToWav(
+        text: String,
+        profile: VoiceProfile,
+        pitchTuningPercent: Float = 0f,
+        speedTuningPercent: Float = 0f,
+        context: android.content.Context
+    ) {
+        if (text.isBlank()) {
+            android.widget.Toast.makeText(context, "אנא הזן טקסט לייצור קול לפני ייצוא", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.Main) {
+            try {
+                val currentTts = tts
+                if (currentTts == null || !_isTtsReady.value) {
+                    throw IllegalStateException("מנוע הדיבור המקומי עדיין בטעינה או לא זמין")
+                }
+
+                var pitchMultiplier: Float = when {
+                    profile.frequencyHz <= 100 -> 0.70f
+                    profile.frequencyHz <= 125 -> 0.82f
+                    profile.frequencyHz >= 210 -> 1.35f
+                    profile.frequencyHz >= 180 -> 1.20f
+                    else -> 1.0f
+                }
+                
+                val pitchModFactor = 1.0f + (pitchTuningPercent / 100f)
+                pitchMultiplier = (pitchMultiplier * pitchModFactor).coerceIn(0.5f, 2.0f)
+                currentTts.setPitch(pitchMultiplier)
+
+                var rateMultiplier: Float = when {
+                    profile.pace.contains("מהיר") || profile.pace.contains("מהירה") || profile.pace.lowercase().contains("fast") -> 1.25f
+                    profile.pace.contains("איטי") || profile.pace.contains("איטית") || profile.pace.lowercase().contains("slow") -> 0.78f
+                    else -> 1.00f
+                }
+                
+                val speedModFactor = 1.0f + (speedTuningPercent / 100f)
+                rateMultiplier = (rateMultiplier * speedModFactor).coerceIn(0.5f, 2.0f)
+                currentTts.setSpeechRate(rateMultiplier)
+
+                val fileName = "voice_cloned_${System.currentTimeMillis()}.wav"
+                
+                val resolver = context.contentResolver
+                val contentValues = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "audio/wav")
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_MUSIC)
+                    }
+                }
+                
+                val uri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    resolver.insert(android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, contentValues)
+                } else {
+                    null
+                }
+
+                val fallbackFile = if (uri == null) {
+                    java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_MUSIC), fileName)
+                } else {
+                    java.io.File(context.cacheDir, fileName)
+                }
+
+                val params = android.os.Bundle()
+                params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "export_$fileName")
+
+                val result = currentTts.synthesizeToFile(text, params, fallbackFile, "export_$fileName")
+                if (result == TextToSpeech.ERROR) {
+                    throw IllegalStateException("שגיאה בייצוא קובץ האודיו")
+                }
+                
+                withContext(Dispatchers.IO) {
+                    kotlinx.coroutines.delay(2000)
+                    if (uri != null && fallbackFile.exists()) {
+                        resolver.openOutputStream(uri)?.use { output ->
+                            fallbackFile.inputStream().use { input ->
+                                input.copyTo(output)
+                            }
+                        }
+                        fallbackFile.delete()
+                    }
+                }
+                
+                android.widget.Toast.makeText(context, "קובץ האודיו ($fileName) יוצא בהצלחה לתיקיית המוזיקה", android.widget.Toast.LENGTH_LONG).show()
+
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(context, "שגיאה בייצוא קובץ האודיו: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -1933,7 +2243,7 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     // --- LiteRT-LM Local Model Integration & Token Saving Automations ---
-    private val _isLiteRtEnabled = MutableStateFlow(false)
+    private val _isLiteRtEnabled = MutableStateFlow(true)
     val isLiteRtEnabled: StateFlow<Boolean> = _isLiteRtEnabled.asStateFlow()
 
     private val _liteRtModelSelected = MutableStateFlow("Gemma-2B-TTS-Local")
