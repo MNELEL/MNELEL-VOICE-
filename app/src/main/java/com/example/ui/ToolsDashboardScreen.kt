@@ -25,6 +25,7 @@ fun ToolsDashboardScreen(onNavigate: (Int) -> Unit) {
         Triple("אימון וכיול מרצים 🎓", Icons.Default.Info, 4),
         Triple("השוואת נתוני אבחון 📊", Icons.Default.DateRange, 6),
         Triple("מעבדת שיבוט אופליין 🧠", Icons.Default.Refresh, 9),
+        Triple("מנתח שמע ואבחון קולי 🎙️", Icons.Default.PlayArrow, 10),
         Triple("נקודות ורכישה 💎", Icons.Default.ShoppingCart, 5)
     )
 

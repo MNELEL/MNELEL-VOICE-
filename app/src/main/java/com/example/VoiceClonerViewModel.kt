@@ -440,6 +440,29 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun analyzeAudioBlob(audioBlob: ByteArray) {
+        if (audioBlob.isEmpty()) {
+            _analysisError.value = "דגימת קול ריקה - אנא הקלט או טען אודיו"
+            return
+        }
+        _isGeminiAnalyzingAudio.value = true
+        _analysisError.value = null
+        _audioAnalysisResult.value = null
+
+        viewModelScope.launch {
+            try {
+                val service = com.example.service.AudioAnalysisService()
+                val apiKey = getEffectiveApiKey()
+                val result = service.analyzeAudioBlob(audioBlob, apiKey = apiKey)
+                _audioAnalysisResult.value = result
+            } catch (e: Exception) {
+                _analysisError.value = "שגיאה בניתוח: ${e.message}"
+            } finally {
+                _isGeminiAnalyzingAudio.value = false
+            }
+        }
+    }
+
     fun exportAnalysisToJson(context: android.content.Context) {
         val result = _audioAnalysisResult.value ?: return
         viewModelScope.launch(Dispatchers.IO) {

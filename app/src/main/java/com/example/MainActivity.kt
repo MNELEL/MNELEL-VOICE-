@@ -458,7 +458,7 @@ fun VoiceClonerAppScreen(
                         Triple("גלריה", Icons.Default.Person, 7)
                     )
                     items.forEach { item ->
-                        val isSelected = currentTab == item.third || (item.third == 8 && (currentTab in 2..6 || currentTab == 9))
+                        val isSelected = currentTab == item.third || (item.third == 8 && (currentTab in 2..6 || currentTab == 9 || currentTab == 10))
                         NavigationBarItem(
                             icon = { Icon(item.second, contentDescription = item.first) },
                             label = { Text(item.first, maxLines = 1, fontSize = if (isNarrow) 10.sp else 12.sp) },
@@ -1414,6 +1414,11 @@ fun VoiceClonerAppScreen(
             }
             9 -> {
                 com.example.ui.OfflineCloningLabScreen(
+                    viewModel = viewModel
+                )
+            }
+            10 -> {
+                com.example.ui.AudioBlobAnalyzerScreen(
                     viewModel = viewModel
                 )
             }

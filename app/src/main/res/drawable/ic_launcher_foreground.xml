@@ -3,6 +3,6 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/voice_cloner_app_icon_1782313609853"
+        android:drawable="@drawable/ic_voice_cloner_1782739468631"
         android:gravity="center" />
 </layer-list>
