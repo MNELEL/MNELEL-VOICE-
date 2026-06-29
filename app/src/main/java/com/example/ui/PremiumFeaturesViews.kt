@@ -70,7 +70,7 @@ fun LandingPageScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .background(Brush.verticalGradient(listOf(Color.White, LightBg)))
+            .background(com.example.ui.theme.PastelGradientBrush)
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(20.dp)

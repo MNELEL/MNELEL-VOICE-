@@ -339,6 +339,9 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
     private val _recordingDurationSec = MutableStateFlow(0)
     val recordingDurationSec: StateFlow<Int> = _recordingDurationSec.asStateFlow()
 
+    private val _recordingDurationMs = MutableStateFlow(0L)
+    val recordingDurationMs: StateFlow<Long> = _recordingDurationMs.asStateFlow()
+
     private val _liveAmplitude = MutableStateFlow(0f)
     val liveAmplitude: StateFlow<Float> = _liveAmplitude.asStateFlow()
 
@@ -700,6 +703,7 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
         _recordedFile.value = null
         _analysisError.value = null
         _recordingDurationSec.value = 0
+        _recordingDurationMs.value = 0L
         _liveAmplitude.value = 0f
         _liveDecibels.value = 20f
         _isRecordingPaused.value = false
@@ -712,15 +716,19 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
         if (lastRecordedFile != null) {
             _isRecording.value = true
             recordingJob = viewModelScope.launch(Dispatchers.Main) {
-                var ticks = 0
+                var accumulatedTimeMs = 0L
+                var lastTimeCheck = System.currentTimeMillis()
                 while (_isRecording.value) {
-                    kotlinx.coroutines.delay(100)
+                    kotlinx.coroutines.delay(30) // update every 30ms for smooth sub-second precision
+                    val now = System.currentTimeMillis()
+                    val delta = now - lastTimeCheck
+                    lastTimeCheck = now
+                    
                     if (!_isRecordingPaused.value) {
-                        ticks += 100
-                        if (ticks >= 1000) {
-                            _recordingDurationSec.value += 1
-                            ticks = 0
-                        }
+                        accumulatedTimeMs += delta
+                        _recordingDurationMs.value = accumulatedTimeMs
+                        _recordingDurationSec.value = (accumulatedTimeMs / 1000).toInt()
+                        
                         val rawAmp = audioHelper.getMaxAmplitude()
                         val normalized = (rawAmp.toFloat() / 32768f).coerceIn(0f, 1f)
                         _liveAmplitude.value = normalized
@@ -1031,12 +1039,10 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-// API Activity Tracker
-    // Combining UI state flows for activity
+    // API Activity Tracker
     val isAnyApiActive: StateFlow<Boolean> = kotlinx.coroutines.flow.combine(
         _isAnalyzing,
         _isSynthesizing,
-        // _isDiarizing, // Not defined yet in this snippet, add if needed or ignore
     ) { analyzing, synthesizing ->
         analyzing || synthesizing
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
@@ -1045,11 +1051,12 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
     private val synthesisCache = mutableMapOf<String, String>()
 
     fun synthesizeText(
-        text: String, 
+        text: String,
         profile: VoiceProfile,
         pitchTuningPercent: Float = 0f,
         speedTuningPercent: Float = 0f,
-        vibeModifier: String = "מקורי"
+        vibeModifier: String = "מקורי",
+        accent: String = "Standard"
     ) {
         if (text.isBlank()) {
             _synthesizeError.value = "אנא הזן טקסט לייצור קול"
@@ -1063,7 +1070,7 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
         }
 
         // Caching check
-        val cacheKey = "${text.trim()}_${profile.id}_${pitchTuningPercent}_${speedTuningPercent}_${vibeModifier}"
+        val cacheKey = "${text.trim()}_${profile.id}_${pitchTuningPercent}_${speedTuningPercent}_${vibeModifier}_${accent}"
         if (synthesisCache.containsKey(cacheKey)) {
              // For now, allow re-synthesis to support refreshing or just play the cached one?
              // Re-synthesis is safer to ensure it works.
@@ -1119,6 +1126,12 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                     "Maintain original acoustic environment."
                 }
 
+                val accentInstruction = if (accent != "Standard") {
+                    "Accent Style: Pronounce the text naturally with a highly authentic and distinct '$accent' accent, affecting intonation, cadence, syllable stress, and speech style."
+                } else {
+                    "Accent Style: Standard authentic pronunciation."
+                }
+
                 // We construct a highly detailed voice modulation prompt in English (as Gemini processes prompt directives for audio in OOB dynamic voices extremely well)
                 val promptText = """
                     SYSTEM COMMAND: Perform an extremely accurate, high-fidelity 1:1 voice cloning emulation of ${profile.name} (Gender: ${profile.gender}).
@@ -1132,6 +1145,7 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                     5. Intonation Rhythm Score: ${profile.intonationScore}/100.
                     6. Articulation & Hebrew Accents: ${profile.pronunciationClarity}/100 clarity.
                     7. Noise Reduction Filter: $noiseReductionStr
+                    8. $accentInstruction
 
                     Read the following Hebrew text exactly as written. Ensure incredibly natural phrasing, proper Hebrew accents, and flawless vocal fidelity:
                     

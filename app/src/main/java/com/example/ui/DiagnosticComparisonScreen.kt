@@ -32,48 +32,51 @@ import kotlin.math.sin
 fun DiagnosticComparisonScreen(viewModel: VoiceClonerViewModel) {
     val allReports by viewModel.allDiagnosisReports.collectAsState()
 
-    Column(
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(
-            text = "השוואת נתוני אבחון קולי 📊",
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
-        Text(
-            text = "השוואה והדמיה בין דוחות העבר, מאפייני אישיות, ומדדים פסיכו-אקוסטיים (מבוסס D3/Recharts style).",
-            fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
+        item {
+            Text(
+                text = "השוואת נתוני אבחון קולי 📊",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = "השוואה והדמיה בין דוחות העבר, מאפייני אישיות, ומדדים פסיכו-אקוסטיים (מבוסס D3/Recharts style).",
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
 
         if (allReports.size < 2) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text("נדרשים לפחות שני דוחות אבחון שנשמרו כדי להציג השוואה.", fontSize = 14.sp)
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text("נדרשים לפחות שני דוחות אבחון שנשמרו כדי להציג השוואה.", fontSize = 14.sp)
+                    }
                 }
             }
         } else {
-            // Show comparative radar/bar chart
-            RadarComparativeChart(reports = allReports.take(2))
+            item {
+                // Show comparative radar/bar chart
+                RadarComparativeChart(reports = allReports.take(2))
+            }
 
-            Spacer(modifier = Modifier.height(20.dp))
-            
-            Text("פירוט הדוחות האחרונים:", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Spacer(modifier = Modifier.height(8.dp))
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(allReports) { report ->
-                    ReportSummaryCard(report)
-                }
+            item {
+                Text("פירוט הדוחות האחרונים:", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+
+            items(allReports) { report ->
+                ReportSummaryCard(report)
             }
         }
     }

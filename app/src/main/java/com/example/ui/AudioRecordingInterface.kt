@@ -46,6 +46,7 @@ fun AudioRecordingInterface(
     isRecording: Boolean,
     isPaused: Boolean,
     durationSec: Int,
+    durationMs: Long = 0L,
     amplitude: Float,
     onStart: () -> Unit,
     onPause: () -> Unit,
@@ -281,10 +282,11 @@ fun AudioRecordingInterface(
             Spacer(modifier = Modifier.height(16.dp))
 
             if (isRecording) {
-                // Duration Counter Block
-                val minutes = durationSec / 60
-                val seconds = durationSec % 60
-                val timeFormatted = String.format("%02d:%02d", minutes, seconds)
+                // Precise Duration Counter Block
+                val min = (durationMs / 60000) % 60
+                val sec = (durationMs / 1000) % 60
+                val centiseconds = (durationMs / 10) % 100
+                val timeFormatted = String.format("%02d:%02d.%02d", min, sec, centiseconds)
 
                 Text(
                     text = timeFormatted,
@@ -477,107 +479,16 @@ private fun RecordingWaveform(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            val primaryColor = MaterialTheme.colorScheme.primary
-            val secondaryColor = MaterialTheme.colorScheme.secondary
-            val onSurfaceColor = MaterialTheme.colorScheme.onSurface
-            Canvas(
+            FrequencyVisualizer(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(vertical = 12.dp, horizontal = 16.dp)
-            ) {
-                val canvasWidth = size.width
-                val canvasHeight = size.height
-
-                // Draw D3-style coordinate grids (dB thresholds)
-                val dbLevels = listOf(0.15f, 0.5f, 0.85f)
-                dbLevels.forEach { fraction ->
-                    val y = canvasHeight * fraction
-                    drawLine(
-                        color = onSurfaceColor.copy(alpha = 0.07f),
-                        start = Offset(0f, y),
-                        end = Offset(canvasWidth, y),
-                        strokeWidth = 1.dp.toPx()
-                    )
-                }
-
-                val barWidth = 3.dp.toPx()
-                val gap = 2.dp.toPx()
-                val step = barWidth + gap
-                val maxBars = (canvasWidth / step).toInt()
-
-                val displayList = if (isRecording) {
-                    if (amplitudeHistory.isEmpty()) {
-                        List(maxBars) { 0.03f }
-                    } else {
-                        val paddingSize = (maxBars - amplitudeHistory.size).coerceAtLeast(0)
-                        val padded = List(paddingSize) { 0.03f } + amplitudeHistory
-                        padded.takeLast(maxBars)
-                    }
-                } else {
-                    // pre-recording steady idle flow
-                    List(maxBars) { index ->
-                        val animOffset = index * 0.15f
-                        0.03f + 0.05f * kotlin.math.sin(animOffset).toFloat().coerceAtLeast(0f)
-                    }
-                }
-
-                val centerY = canvasHeight / 2f
-                val startX = (canvasWidth - (displayList.size * step)) / 2f
-
-                val upperPath = Path()
-                val lowerPath = Path()
-
-                displayList.forEachIndexed { index, amp ->
-                    val x = startX + index * step
-                    val maxClipHeight = canvasHeight * 0.85f
-                    val barHeight = (amp * maxClipHeight).coerceIn(4.dp.toPx(), maxClipHeight)
-                    val top = centerY - barHeight / 2f
-                    val bottom = centerY + barHeight / 2f
-
-                    if (index == 0) {
-                        upperPath.moveTo(x, top)
-                        lowerPath.moveTo(x, bottom)
-                    } else {
-                        upperPath.lineTo(x, top)
-                        lowerPath.lineTo(x, bottom)
-                    }
-
-                    val barColor = if (isRecording) {
-                        if (isPaused) {
-                            Color(0xFFF59E0B)
-                        } else {
-                            when {
-                                amp > 0.75f -> Color(0xFFEF4444)
-                                amp < 0.03f -> primaryColor.copy(alpha = 0.35f)
-                                else -> primaryColor
-                            }
-                        }
-                    } else {
-                        onSurfaceColor.copy(alpha = 0.12f)
-                    }
-
-                    drawRoundRect(
-                        color = barColor,
-                        topLeft = Offset(x, top),
-                        size = Size(barWidth, barHeight),
-                        cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
-                    )
-                }
-
-                // Stroke D3 outer contour
-                if (displayList.isNotEmpty()) {
-                    drawPath(
-                        path = upperPath,
-                        color = secondaryColor.copy(alpha = 0.4f),
-                        style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
-                    )
-                    drawPath(
-                        path = lowerPath,
-                        color = secondaryColor.copy(alpha = 0.4f),
-                        style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
-                    )
-                }
-            }
+                    .padding(vertical = 12.dp, horizontal = 16.dp),
+                isActive = isRecording && !isPaused,
+                amplitude = amplitude,
+                barCount = 40,
+                barColor = MaterialTheme.colorScheme.primary,
+                bottomAligned = false
+            )
         }
 
         // Live input feedback legends

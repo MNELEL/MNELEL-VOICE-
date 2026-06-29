@@ -106,6 +106,7 @@ fun VoiceClonerAppScreen(
 
     val isRecordingPaused by viewModel.isRecordingPaused.collectAsStateWithLifecycle()
     val recordingDurationSec by viewModel.recordingDurationSec.collectAsStateWithLifecycle()
+    val recordingDurationMs by viewModel.recordingDurationMs.collectAsStateWithLifecycle()
     val liveAmplitude by viewModel.liveAmplitude.collectAsStateWithLifecycle()
     val liveDecibels by viewModel.liveDecibels.collectAsStateWithLifecycle()
     val isNoiseMonitoring by viewModel.isNoiseMonitoring.collectAsStateWithLifecycle()
@@ -238,7 +239,7 @@ fun VoiceClonerAppScreen(
         Column(
             modifier = modifier
                 .fillMaxSize()
-                .background(Brush.verticalGradient(listOf(Color.White, LightBg)))
+                .background(com.example.ui.theme.PastelGradientBrush)
                 .padding(16.dp)
         ) {
         // Rate Limit Global Notification
@@ -440,6 +441,9 @@ fun VoiceClonerAppScreen(
             )
         }
 
+        val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+        val isNarrow = configuration.screenWidthDp < 340
+
         Scaffold(
             bottomBar = {
                 NavigationBar(
@@ -454,11 +458,12 @@ fun VoiceClonerAppScreen(
                         Triple("גלריה", Icons.Default.Person, 7)
                     )
                     items.forEach { item ->
-                        val isSelected = currentTab == item.third || (item.third == 8 && currentTab in 2..6)
+                        val isSelected = currentTab == item.third || (item.third == 8 && (currentTab in 2..6 || currentTab == 9))
                         NavigationBarItem(
                             icon = { Icon(item.second, contentDescription = item.first) },
-                            label = { Text(item.first, maxLines = 1, fontSize = 12.sp) },
+                            label = { Text(item.first, maxLines = 1, fontSize = if (isNarrow) 10.sp else 12.sp) },
                             selected = isSelected,
+                            alwaysShowLabel = !isNarrow,
                             onClick = { 
                                 currentTab = item.third
                             },
@@ -571,7 +576,7 @@ fun VoiceClonerAppScreen(
                                     AudioRecordingInterface(
                                         isRecording = isRecording,
                                         isPaused = isRecordingPaused,
-                                        durationSec = recordingDurationSec,
+                                        durationSec = recordingDurationSec, durationMs = recordingDurationMs,
                                         amplitude = liveAmplitude,
                                         onStart = { viewModel.startRecordVoice() },
                                         onPause = { viewModel.pauseRecordVoice() },
@@ -839,6 +844,32 @@ fun VoiceClonerAppScreen(
                                                     )
                                                 }
                                                 Spacer(modifier = Modifier.height(6.dp))
+
+                                                // Frequency Bar Visualizer for Playback
+                                                if (isPlayingRecorded) {
+                                                    // Simulated playback amplitude using a looping animation
+                                                    val infiniteTransition = rememberInfiniteTransition()
+                                                    val playAnimAmp by infiniteTransition.animateFloat(
+                                                        initialValue = 0.3f,
+                                                        targetValue = 0.9f,
+                                                        animationSpec = infiniteRepeatable(
+                                                            animation = tween(400, easing = LinearEasing),
+                                                            repeatMode = RepeatMode.Reverse
+                                                        )
+                                                    )
+                                                    FrequencyVisualizer(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .height(30.dp)
+                                                            .padding(horizontal = 8.dp),
+                                                        isActive = isPlayingRecorded,
+                                                        amplitude = playAnimAmp,
+                                                        barCount = 20,
+                                                        barColor = MaterialTheme.colorScheme.secondary
+                                                    )
+                                                    Spacer(modifier = Modifier.height(6.dp))
+                                                }
+
                                                 Slider(
                                                     value = if (isPlayingRecorded) playbackProgress else 0f,
                                                     onValueChange = { newValue ->
@@ -1308,8 +1339,8 @@ fun VoiceClonerAppScreen(
                                     synthText = ""
                                 }
                             },
-                            onSynthesize = { text, pitchTuning, speedTuning, vibe ->
-                                viewModel.synthesizeText(text, profile, pitchTuning, speedTuning, vibe)
+                            onSynthesize = { text, pitchTuning, speedTuning, vibe, accent ->
+                                viewModel.synthesizeText(text, profile, pitchTuning, speedTuning, vibe, accent)
                             },
                             onLocalSynthesize = { text, pitchTuning, speedTuning ->
                                 viewModel.synthesizeTextLocal(text, profile, pitchTuning, speedTuning)
@@ -1327,7 +1358,8 @@ fun VoiceClonerAppScreen(
                             onPlayResultSample = { viewModel.playResultSample(it) },
                             onStopResultSample = { viewModel.stopResultSample() },
                             onDeleteResult = { viewModel.deleteResult(it) },
-                            templates = templates
+                            templates = templates,
+                            playbackProgress = playbackProgress
                         )
                     }
                 }
@@ -1379,6 +1411,11 @@ fun VoiceClonerAppScreen(
             }
             8 -> {
                 ToolsDashboardScreen(onNavigate = { currentTab = it })
+            }
+            9 -> {
+                com.example.ui.OfflineCloningLabScreen(
+                    viewModel = viewModel
+                )
             }
         }
     }
@@ -1647,7 +1684,7 @@ fun VoiceProfileCard(
     onPlaySample: () -> Unit,
     onStopSample: () -> Unit,
     onToggleExpand: () -> Unit,
-    onSynthesize: (String, Float, Float, String) -> Unit,
+    onSynthesize: (String, Float, Float, String, String) -> Unit,
     onLocalSynthesize: (String, Float, Float) -> Unit,
     onExportClick: () -> Unit,
     onDelete: () -> Unit,
@@ -1656,12 +1693,14 @@ fun VoiceProfileCard(
     onPlayResultSample: (com.example.data.VoiceGenerationResult) -> Unit,
     onStopResultSample: () -> Unit,
     onDeleteResult: (com.example.data.VoiceGenerationResult) -> Unit,
-    templates: List<com.example.data.VoiceStyleTemplate>
+    templates: List<com.example.data.VoiceStyleTemplate>,
+    playbackProgress: Float = 0f
 ) {
     val context = LocalContext.current
     var userPitchTuning by remember { mutableStateOf(0f) }
     var userSpeedTuning by remember { mutableStateOf(0f) }
     var selectedVibeModifier by remember { mutableStateOf("מקורי") }
+    var selectedAccent by remember { mutableStateOf("Standard") }
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -2010,6 +2049,51 @@ fun VoiceProfileCard(
                                     }
                                 }
                             }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Text(
+                                text = "מבטא והגייה (Accent):",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(bottom = 6.dp)
+                            )
+                            val accents = listOf(
+                                "Standard" to "רגיל",
+                                "Russian" to "רוסי",
+                                "Moroccan" to "מרוקאי",
+                                "Yemeni" to "תימני",
+                                "American" to "אמריקאי",
+                                "British" to "בריטי"
+                            )
+                            androidx.compose.foundation.lazy.LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(accents.size) { index ->
+                                    val (accentKey, accentLabel) = accents[index]
+                                    val isSelected = selectedAccent == accentKey
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(
+                                                if (isSelected) MaterialTheme.colorScheme.primary 
+                                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+                                            )
+                                            .defaultMinSize(minWidth = 60.dp, minHeight = 44.dp)
+                                            .clickable { selectedAccent = accentKey }
+                                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = accentLabel,
+                                            fontSize = 14.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -2021,7 +2105,7 @@ fun VoiceProfileCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Button(
-                            onClick = { onSynthesize(synthText, userPitchTuning, userSpeedTuning, selectedVibeModifier) },
+                            onClick = { onSynthesize(synthText, userPitchTuning, userSpeedTuning, selectedVibeModifier, selectedAccent) },
                             enabled = !isSynthesizing && synthText.isNotEmpty(),
                             modifier = Modifier
                                 .weight(1.1f)
@@ -2123,6 +2207,19 @@ fun VoiceProfileCard(
                                             fontSize = 14.sp,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                                         )
+                                        if (isPlayingResultId == result.id) {
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            FrequencyVisualizer(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(24.dp),
+                                                isActive = true,
+                                                amplitude = 0.3f + 0.6f * playbackProgress,
+                                                barCount = 20,
+                                                barColor = MaterialTheme.colorScheme.primary,
+                                                bottomAligned = false
+                                            )
+                                        }
                                     }
                                 }
 

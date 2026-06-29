@@ -88,13 +88,56 @@ fun SynthesizeVoiceComponent(
             }
         }
 
+        var accentExpanded by remember { mutableStateOf(false) }
+        val accentOptions = listOf(
+            "Standard" to "רגיל (Standard)",
+            "Russian" to "רוסי (Russian)",
+            "Moroccan" to "מרוקאי (Moroccan)",
+            "Yemeni" to "תימני (Yemeni)",
+            "American" to "אמריקאי (American)",
+            "British" to "בריטי (British)"
+        )
+        var selectedAccentPair by remember { mutableStateOf(accentOptions[0]) }
+
+        ExposedDropdownMenuBox(
+            expanded = accentExpanded,
+            onExpandedChange = { accentExpanded = !accentExpanded },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            OutlinedTextField(
+                readOnly = true,
+                value = selectedAccentPair.second,
+                onValueChange = { },
+                label = { Text("מבטא קול") },
+                trailingIcon = {
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = accentExpanded)
+                },
+                modifier = Modifier.menuAnchor().fillMaxWidth()
+            )
+            ExposedDropdownMenu(
+                expanded = accentExpanded,
+                onDismissRequest = { accentExpanded = false }
+            ) {
+                accentOptions.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option.second) },
+                        onClick = {
+                            selectedAccentPair = option
+                            accentExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+
         Button(
             onClick = {
                 if (inputPhrase.isNotBlank()) {
                     viewModel.synthesizeText(
                         text = inputPhrase,
                         profile = profile,
-                        vibeModifier = selectedVibe
+                        vibeModifier = selectedVibe,
+                        accent = selectedAccentPair.first
                     )
                     onSynthesize(inputPhrase)
                 } else {

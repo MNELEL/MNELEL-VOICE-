@@ -1,6 +1,7 @@
 package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 
 // Light, Warm & Friendly Theme Colors (As requested: "עיצוב בהיר יותר ונעים לעיין, רקע פחות כהה וקודר")
 val LightBg = Color(0xFFF9FAFC)        // Warm off-white, pleasant to the eye
@@ -13,6 +14,17 @@ val DarkCharcoal = Color(0xFF1F2937)   // Clean rounded charcoal for ultra-clear
 val SoftMuted = Color(0xFF6B7280)      // Soft grey for secondary labels
 val LightBorder = Color(0xFFEEF2F6)    // Extremely clean light-border color
 val LightGreen = Color(0xFF10B981)     // Warm bright success green
+
+// Premium Pastel Gradient Brush (Smooth blending of lavender, rose, warm peach, and sky blue)
+val PastelGradientBrush = Brush.linearGradient(
+    colors = listOf(
+        Color(0xFFEEF2F6), // Base light warm off-white
+        Color(0xFFE0E7FF), // Soft lavender indigo-pastel
+        Color(0xFFFCE7F3), // Soft baby rose pink
+        Color(0xFFFEF3C7), // Soft sunny yellow/peach
+        Color(0xFFE0F2FE)  // Soft sky blue
+    )
+)
 
 // Original Dark Theme Colors (kept for compatibility)
 val CharcoalDark = Color(0xFF12131A)
