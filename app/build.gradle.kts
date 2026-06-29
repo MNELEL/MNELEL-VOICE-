@@ -14,8 +14,8 @@ android {
     applicationId = "com.aistudio.voicecloner.abcvdx"
     minSdk = 24
     targetSdk = 36
-    versionCode = 19
-    versionName = "1.0.1"
+    versionCode = 20
+    versionName = "1.0.2"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -60,18 +60,6 @@ android {
     buildConfig = true
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
-}
-
-tasks.register<Copy>("copyMappingFile") {
-  from(layout.buildDirectory.file("outputs/mapping/release/mapping.txt"))
-  into(rootProject.layout.projectDirectory)
-  rename { "mapping.txt" }
-}
-
-tasks.whenTaskAdded {
-  if (name == "assembleRelease" || name == "bundleRelease") {
-    finalizedBy("copyMappingFile")
-  }
 }
 
 // Configure the Secrets Gradle Plugin to use .env and .env.example files
