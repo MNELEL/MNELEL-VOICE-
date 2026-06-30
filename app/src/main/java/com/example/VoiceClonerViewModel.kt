@@ -71,6 +71,40 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
         updateApiKeyAvailability()
     }
 
+    // --- Local JSON Voice Signatures on Disk ---
+    data class SignatureFile(val name: String, val lastModified: Long, val size: Long, val content: String)
+    data class SignatureSecurityStatus(
+        val isSuccess: Boolean,
+        val message: String,
+        val type: String, // "IMPORT" or "EXPORT" or "DELETE" or "RENAME"
+        val checksum: String,
+        val timestamp: Long = System.currentTimeMillis()
+    )
+
+    private val _localSignatures = MutableStateFlow<List<SignatureFile>>(emptyList())
+    val localSignatures: StateFlow<List<SignatureFile>> = _localSignatures.asStateFlow()
+
+    private val _signatureSecurityStatus = MutableStateFlow<SignatureSecurityStatus?>(null)
+    val signatureSecurityStatus: StateFlow<SignatureSecurityStatus?> = _signatureSecurityStatus.asStateFlow()
+
+    // --- Sequential Speech Synthesis Task Queue ---
+    data class QueueTask(
+        val id: String = java.util.UUID.randomUUID().toString(),
+        val text: String,
+        val profile: VoiceProfile,
+        val status: QueueStatus
+    )
+    enum class QueueStatus { WAITING, PROCESSING, COMPLETED, FAILED }
+
+    private val _localTtsQueue = MutableStateFlow<List<QueueTask>>(emptyList())
+    val localTtsQueue: StateFlow<List<QueueTask>> = _localTtsQueue.asStateFlow()
+
+    private val _isQueueProcessing = MutableStateFlow(false)
+    val isQueueProcessing: StateFlow<Boolean> = _isQueueProcessing.asStateFlow()
+
+    private val _currentQueueIndex = MutableStateFlow(-1)
+    val currentQueueIndex: StateFlow<Int> = _currentQueueIndex.asStateFlow()
+
     private var tts: TextToSpeech? = null
     private val _isTtsReady = MutableStateFlow(false)
     val isTtsReady: StateFlow<Boolean> = _isTtsReady.asStateFlow()
@@ -2327,21 +2361,7 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    // --- Local JSON Voice Signatures on Disk ---
-    data class SignatureFile(val name: String, val lastModified: Long, val size: Long, val content: String)
-    data class SignatureSecurityStatus(
-        val isSuccess: Boolean,
-        val message: String,
-        val type: String, // "IMPORT" or "EXPORT" or "DELETE" or "RENAME"
-        val checksum: String,
-        val timestamp: Long = System.currentTimeMillis()
-    )
 
-    private val _localSignatures = MutableStateFlow<List<SignatureFile>>(emptyList())
-    val localSignatures: StateFlow<List<SignatureFile>> = _localSignatures.asStateFlow()
-
-    private val _signatureSecurityStatus = MutableStateFlow<SignatureSecurityStatus?>(null)
-    val signatureSecurityStatus: StateFlow<SignatureSecurityStatus?> = _signatureSecurityStatus.asStateFlow()
 
     fun clearSignatureSecurityStatus() {
         _signatureSecurityStatus.value = null
@@ -2600,23 +2620,7 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    // --- Sequential Speech Synthesis Task Queue ---
-    data class QueueTask(
-        val id: String = java.util.UUID.randomUUID().toString(),
-        val text: String,
-        val profile: VoiceProfile,
-        val status: QueueStatus
-    )
-    enum class QueueStatus { WAITING, PROCESSING, COMPLETED, FAILED }
 
-    private val _localTtsQueue = MutableStateFlow<List<QueueTask>>(emptyList())
-    val localTtsQueue: StateFlow<List<QueueTask>> = _localTtsQueue.asStateFlow()
-
-    private val _isQueueProcessing = MutableStateFlow(false)
-    val isQueueProcessing: StateFlow<Boolean> = _isQueueProcessing.asStateFlow()
-
-    private val _currentQueueIndex = MutableStateFlow(-1)
-    val currentQueueIndex: StateFlow<Int> = _currentQueueIndex.asStateFlow()
 
     fun addTaskToQueue(text: String, profile: VoiceProfile) {
         if (text.isBlank()) return
