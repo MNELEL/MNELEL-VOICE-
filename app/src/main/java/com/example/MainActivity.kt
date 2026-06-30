@@ -861,30 +861,20 @@ fun VoiceClonerAppScreen(
                                                 }
                                                 Spacer(modifier = Modifier.height(6.dp))
 
-                                                // Frequency Bar Visualizer for Playback
-                                                if (isPlayingRecorded) {
-                                                    // Simulated playback amplitude using a looping animation
-                                                    val infiniteTransition = rememberInfiniteTransition()
-                                                    val playAnimAmp by infiniteTransition.animateFloat(
-                                                        initialValue = 0.3f,
-                                                        targetValue = 0.9f,
-                                                        animationSpec = infiniteRepeatable(
-                                                            animation = tween(400, easing = LinearEasing),
-                                                            repeatMode = RepeatMode.Reverse
-                                                        )
-                                                    )
-                                                    FrequencyVisualizer(
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .height(30.dp)
-                                                            .padding(horizontal = 8.dp),
-                                                        isActive = isPlayingRecorded,
-                                                        amplitude = playAnimAmp,
-                                                        barCount = 20,
-                                                        barColor = MaterialTheme.colorScheme.secondary
-                                                    )
-                                                    Spacer(modifier = Modifier.height(6.dp))
+                                                // Real-time Static Waveform Preview of the recorded audio sample
+                                                val mockAmplitudes = remember(recordedFile) {
+                                                    List(60) { (0.1f + Math.random() * 0.8f).toFloat() }
                                                 }
+                                                StaticWaveformPreview(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(40.dp)
+                                                        .padding(horizontal = 8.dp),
+                                                    amplitudes = mockAmplitudes,
+                                                    progress = if (isPlayingRecorded) playbackProgress else 0f,
+                                                    activeColor = MaterialTheme.colorScheme.secondary
+                                                )
+                                                Spacer(modifier = Modifier.height(6.dp))
 
                                                 Slider(
                                                     value = if (isPlayingRecorded) playbackProgress else 0f,
@@ -3507,5 +3497,43 @@ fun LiteRtDiagnosticOverlay(
         }
     }
 }
+
+@Composable
+fun StaticWaveformPreview(
+    modifier: Modifier = Modifier,
+    amplitudes: List<Float>,
+    progress: Float,
+    activeColor: Color = MaterialTheme.colorScheme.primary,
+    inactiveColor: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+) {
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val width = size.width
+        val height = size.height
+        val barWidth = 4.dp.toPx()
+        val spacing = 2.dp.toPx()
+        val totalBars = (width / (barWidth + spacing)).toInt()
+        
+        val step = if (amplitudes.isNotEmpty()) amplitudes.size.toFloat() / totalBars else 1f
+        
+        for (i in 0 until totalBars) {
+            val ampIndex = (i * step).toInt().coerceIn(0, maxOf(0, amplitudes.size - 1))
+            val amp = if (amplitudes.isNotEmpty()) amplitudes[ampIndex] else 0.5f
+            val barHeight = (height * amp).coerceAtLeast(4.dp.toPx())
+            val startX = i * (barWidth + spacing)
+            
+            val isPlayed = (startX / width) <= progress
+            val color = if (isPlayed) activeColor else inactiveColor
+            
+            drawLine(
+                color = color,
+                start = androidx.compose.ui.geometry.Offset(startX + barWidth / 2, (height - barHeight) / 2),
+                end = androidx.compose.ui.geometry.Offset(startX + barWidth / 2, (height + barHeight) / 2),
+                strokeWidth = barWidth,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+        }
+    }
+}
+
 
 
