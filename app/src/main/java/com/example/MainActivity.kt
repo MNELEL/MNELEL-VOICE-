@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -328,7 +329,7 @@ fun VoiceClonerAppScreen(
                     }
                 }
                 Text(
-                    text = "עריכה, ניתוח ושיבוט קולות באמצעות Gemini",
+                    text = "עריכה, ניתוח ושיבוט קולות באמצעות ElevenLabs",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                     maxLines = 1,
@@ -383,7 +384,7 @@ fun VoiceClonerAppScreen(
                 onDismissRequest = { showApiKeyDialog = false },
                 title = {
                     Text(
-                        text = "הגדרת מפתח Gemini API",
+                        text = "הגדרת מפתח ElevenLabs API",
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp,
                         color = MaterialTheme.colorScheme.primary
@@ -394,7 +395,7 @@ fun VoiceClonerAppScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            text = "לצורך ניתוח דיבור ושיבוט קולות, האפליקציה משתמשת בשירותי הבינה המלאכותית של Gemini. באפשרותך להגדיר מפתח אישי במידה ומפתח ברירת המחדל חסר או שאינו תקין (פתרון לשגיאה 103/403).",
+                            text = "לצורך ניתוח דיבור ושיבוט קולות, האפליקציה משתמשת בשירותי הבינה המלאכותית של ElevenLabs. באפשרותך להגדיר מפתח אישי במידה ומפתח ברירת המחדל חסר או שאינו תקין (פתרון לשגיאה 103/403).",
                             fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                         )
@@ -402,14 +403,14 @@ fun VoiceClonerAppScreen(
                         OutlinedTextField(
                             value = tempKey,
                             onValueChange = { tempKey = it },
-                            label = { Text("מפתח Gemini API של גוגל", fontSize = 14.sp) },
-                            placeholder = { Text("הכנס מפתח AI לכאן...", fontSize = 14.sp) },
+                            label = { Text("מפתח ElevenLabs API", fontSize = 14.sp) },
+                            placeholder = { Text("הכנס מפתח API לכאן...", fontSize = 14.sp) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(8.dp)
                         )
                         
-                        val builtinKeyExists = BuildConfig.GEMINI_API_KEY.isNotEmpty() && BuildConfig.GEMINI_API_KEY != "MY_GEMINI_API_KEY"
+                        val builtinKeyExists = BuildConfig.ELEVENLABS_API_KEY.isNotEmpty() && BuildConfig.ELEVENLABS_API_KEY != "MY_ELEVENLABS_API_KEY"
                         if (builtinKeyExists) {
                             Text(
                                 text = "* קיים מפתח ברירת מחדל מובנה בשרת / קובץ .env",
@@ -903,7 +904,7 @@ fun VoiceClonerAppScreen(
 
                                 // Gemini Audio Analysis Section
                                 Text(
-                                    text = "ניתוח אקוסטי מתקדם (Gemini AI)",
+                                    text = "ניתוח אקוסטי מתקדם (מנוע מקומי)",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp,
                                     color = MaterialTheme.colorScheme.primary,
@@ -920,7 +921,7 @@ fun VoiceClonerAppScreen(
                                         shape = RoundedCornerShape(12.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                                     ) {
-                                        Text("נתח קובץ שמע באמצעות Gemini AI")
+                                        Text("נתח קובץ שמע באמצעות מנוע מקומי")
                                     }
                                 }
 
@@ -3000,30 +3001,32 @@ fun Html5AudioPlayer(
                 )
                 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     val presets = listOf(
                         "None" to "רגיל 👤",
+                        "Radio" to "רדיו 📻",
+                        "Podcast" to "פודקאסט 🎤",
+                        "Echo" to "הד ⛪",
                         "Studio" to "אולפן 🎙️",
                         "Room" to "חדר 🏠",
                         "Hall" to "אולם 🏛️",
-                        "Cathedral" to "הד ⛪"
+                        "Cathedral" to "קתדרלה ⛪"
                     )
                     
                     presets.forEach { (presetKey, displayName) ->
                         val isSelected = currentPreset == presetKey
                         Box(
                             modifier = Modifier
-                                .weight(1f)
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(if (isSelected) Color(0xFF4285F4) else Color.White)
                                 .border(1.dp, if (isSelected) Color(0xFF4285F4) else Color(0xFFDADCE0), RoundedCornerShape(8.dp))
-                                .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
+                                .defaultMinSize(minWidth = 60.dp, minHeight = 44.dp)
                                 .clickable {
                                     viewModel.setAcousticPreset(presetKey)
                                 }
-                                .padding(horizontal = 4.dp, vertical = 6.dp),
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(

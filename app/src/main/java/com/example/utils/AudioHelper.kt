@@ -95,7 +95,8 @@ class AudioHelper(private val context: Context) {
     }
 
     private var presetReverb: android.media.audiofx.PresetReverb? = null
-    var activeAcousticPreset: String = "None" // "None", "Studio", "Room", "Hall", "Cathedral"
+    private var equalizer: android.media.audiofx.Equalizer? = null
+    var activeAcousticPreset: String = "None" // "None", "Studio", "Room", "Hall", "Cathedral", "Radio", "Podcast", "Echo"
 
     // --- Playback ---
 
@@ -115,25 +116,63 @@ class AudioHelper(private val context: Context) {
                 
                 if (activeAcousticPreset != "None") {
                     try {
-                        val presetVal: Short = when (activeAcousticPreset) {
-                            "Studio" -> android.media.audiofx.PresetReverb.PRESET_SMALLROOM
-                            "Room" -> android.media.audiofx.PresetReverb.PRESET_LARGEROOM
-                            "Hall" -> android.media.audiofx.PresetReverb.PRESET_LARGEHALL
-                            "Cathedral" -> android.media.audiofx.PresetReverb.PRESET_PLATE
-                            else -> 0
-                        }
-                        if (presetVal > 0) {
-                            presetReverb?.release()
-                            presetReverb = android.media.audiofx.PresetReverb(1, audioSessionId).apply {
-                                preset = presetVal
-                                enabled = true
+                        val isReverb = activeAcousticPreset in listOf("Studio", "Room", "Hall", "Cathedral", "Echo")
+                        val isEq = activeAcousticPreset in listOf("Radio", "Podcast")
+                        
+                        if (isReverb) {
+                            val presetVal: Short = when (activeAcousticPreset) {
+                                "Studio" -> android.media.audiofx.PresetReverb.PRESET_SMALLROOM
+                                "Room" -> android.media.audiofx.PresetReverb.PRESET_LARGEROOM
+                                "Hall" -> android.media.audiofx.PresetReverb.PRESET_LARGEHALL
+                                "Cathedral" -> android.media.audiofx.PresetReverb.PRESET_PLATE
+                                "Echo" -> android.media.audiofx.PresetReverb.PRESET_LARGEHALL // Echo mapped to Large Hall
+                                else -> 0
                             }
-                            attachAuxEffect(presetReverb!!.id)
-                            setAuxEffectSendLevel(1.0f)
-                            Log.d("AudioHelper", "Applied PresetReverb $activeAcousticPreset to session $audioSessionId")
+                            if (presetVal > 0) {
+                                presetReverb?.release()
+                                presetReverb = android.media.audiofx.PresetReverb(1, audioSessionId).apply {
+                                    preset = presetVal
+                                    enabled = true
+                                }
+                                attachAuxEffect(presetReverb!!.id)
+                                setAuxEffectSendLevel(1.0f)
+                            }
                         }
+                        
+                        if (isEq) {
+                            equalizer?.release()
+                            equalizer = android.media.audiofx.Equalizer(1, audioSessionId).apply {
+                                enabled = true
+                                val numBands = numberOfBands
+                                if (activeAcousticPreset == "Radio") {
+                                    // Radio effect: Boost mids, cut lows and highs
+                                    for (i in 0 until numBands) {
+                                        val freq = getCenterFreq(i.toShort())
+                                        if (freq < 400000 || freq > 4000000) {
+                                            setBandLevel(i.toShort(), -1500) // Cut lows/highs
+                                        } else {
+                                            setBandLevel(i.toShort(), 800) // Boost mids
+                                        }
+                                    }
+                                } else if (activeAcousticPreset == "Podcast") {
+                                    // Podcast effect: Boost lows for depth, boost presence
+                                    for (i in 0 until numBands) {
+                                        val freq = getCenterFreq(i.toShort())
+                                        if (freq < 200000) {
+                                            setBandLevel(i.toShort(), 500) // Boost bass
+                                        } else if (freq > 3000000 && freq < 6000000) {
+                                            setBandLevel(i.toShort(), 400) // Boost presence
+                                        } else {
+                                            setBandLevel(i.toShort(), 0) // Flat mids
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Log.d("AudioHelper", "Applied Acoustic Preset: $activeAcousticPreset to session $audioSessionId")
                     } catch (e: Exception) {
-                        Log.e("AudioHelper", "Failed to apply PresetReverb", e)
+                        Log.e("AudioHelper", "Failed to apply Acoustic Preset", e)
                     }
                 }
 
@@ -161,6 +200,15 @@ class AudioHelper(private val context: Context) {
                 }
             }
             presetReverb = null
+            equalizer?.apply {
+                try {
+                    enabled = false
+                    release()
+                } catch (e: Exception) {
+                    Log.e("AudioHelper", "Failed to disable equalizer", e)
+                }
+            }
+            equalizer = null
             mediaPlayer?.apply {
                 if (isPlaying) {
                     stop()

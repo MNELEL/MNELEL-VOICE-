@@ -358,7 +358,7 @@ fun AudioBlobAnalyzerScreen(viewModel: VoiceClonerViewModel) {
                     if (isAnalyzing) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("מנתח באמצעות Gemini AI...")
+                        Text("מנתח באמצעות מנוע אקוסטי מקומי...")
                     } else {
                         Icon(Icons.Default.Settings, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
@@ -795,7 +795,8 @@ fun AudioBlobAnalyzerScreen(viewModel: VoiceClonerViewModel) {
                                     intonationScore = result.intonationScore,
                                     breathPauseScore = result.breathPauseScore,
                                     distortionLevel = 100 - result.clarityScore,
-                                    embedding = result.voicePrint.toByteArray()
+                                    embedding = result.voicePrint.toByteArray(),
+                                    isDraft = false
                                 )
                                 viewModel.saveProfile(newProfile)
                                 ToastHelper.show(context, "פרופיל הקול '$profileName' נשמר בהצלחה לזיכרון המקומי! 💾")
@@ -810,6 +811,48 @@ fun AudioBlobAnalyzerScreen(viewModel: VoiceClonerViewModel) {
                         Icon(Icons.Default.Check, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("שמור פרופיל קול משובט במאגר 💾")
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            val draftName = profileName.ifBlank { "טיוטה - ${System.currentTimeMillis()}" }
+                            val savedFile = viewModel.recordedFile.value
+                            val newProfile = com.example.data.VoiceProfile(
+                                name = draftName,
+                                gender = when(selectedGender) {
+                                    "זכר" -> "Male"
+                                    "נקבה" -> "Female"
+                                    else -> "Other"
+                                },
+                                description = voiceDescription.ifBlank { "טיוטה להמשך עריכה" },
+                                audioPath = savedFile?.absolutePath,
+                                pitch = if (result.estimatedPitchHz < 160) "Deep" else if (result.estimatedPitchHz < 220) "Medium" else "High",
+                                tone = result.voiceToneAndStyle.ifBlank { "Warm" },
+                                vibe = "Professional",
+                                pace = "Medium",
+                                geminiVoiceName = "Custom Cloned",
+                                frequencyHz = result.estimatedPitchHz,
+                                clarityScore = result.clarityScore,
+                                pronunciationClarity = result.pronunciationClarity,
+                                intonationScore = result.intonationScore,
+                                breathPauseScore = result.breathPauseScore,
+                                distortionLevel = 100 - result.clarityScore,
+                                embedding = result.voicePrint.toByteArray(),
+                                isDraft = true
+                            )
+                            viewModel.saveProfile(newProfile)
+                            ToastHelper.show(context, "הטיוטה נשמרה בהצלחה! 📝")
+                            profileName = ""
+                            voiceDescription = ""
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(androidx.compose.material.icons.Icons.Default.Edit, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("שמור כטיוטה להמשך עריכה 📝")
                     }
                 }
             }
@@ -877,7 +920,19 @@ fun AudioBlobAnalyzerScreen(viewModel: VoiceClonerViewModel) {
                                     }
                                 } else {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(profile.name, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(profile.name, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                            if (profile.isDraft) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Box(
+                                                    modifier = Modifier
+                                                        .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(4.dp))
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text("טיוטה", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                                                }
+                                            }
+                                        }
                                         Text(profile.description, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         Text("תדר ממוצע: ${profile.frequencyHz}Hz | איכות: ${profile.clarityScore}%", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
                                     }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,20 +30,65 @@ fun SynthesizeVoiceComponent(
     val context = LocalContext.current
     val isSynthesizing by viewModel.isSynthesizing.collectAsState()
     val isNoiseReductionEnabled by viewModel.isNoiseReductionEnabled.collectAsState()
+    
+    var fileSynthesisProgress by remember { mutableStateOf(0f) }
+    
+    LaunchedEffect(isSynthesizing) {
+        if (isSynthesizing && inputPhrase.length > 50) {
+            fileSynthesisProgress = 0f
+            while (fileSynthesisProgress < 0.95f && isSynthesizing) {
+                kotlinx.coroutines.delay(100)
+                fileSynthesisProgress += 0.02f
+            }
+        } else {
+            fileSynthesisProgress = 0f
+        }
+    }
+
+    val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            try {
+                context.contentResolver.openInputStream(it)?.bufferedReader()?.use { reader ->
+                    onInputPhraseChange(reader.readText())
+                }
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(context, "שגיאה בקריאת הקובץ", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("הקלד טקסט לסינתזה קולית:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("הקלד טקסט או העלה קובץ לסינתזה:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            IconButton(
+                onClick = { launcher.launch("text/plain") },
+                modifier = Modifier.padding(start = 8.dp)
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = "Upload Text File",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
         
         OutlinedTextField(
             value = inputPhrase,
             onValueChange = onInputPhraseChange,
-            placeholder = { Text("הזן טקסט כאן...") },
-            modifier = Modifier.fillMaxWidth().height(100.dp),
+            placeholder = { Text("הזן טקסט או העלה קובץ טקסט שלם...") },
+            modifier = Modifier.fillMaxWidth().height(140.dp),
             shape = RoundedCornerShape(12.dp)
         )
+
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(
@@ -127,6 +173,19 @@ fun SynthesizeVoiceComponent(
                         }
                     )
                 }
+            }
+        }
+
+        if (isSynthesizing && inputPhrase.length > 50) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text("מסנתז אודיו מתוך טקסט (קובץ ארוך)...", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(4.dp))
+                LinearProgressIndicator(
+                    progress = fileSynthesisProgress,
+                    modifier = Modifier.fillMaxWidth().height(6.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
             }
         }
 

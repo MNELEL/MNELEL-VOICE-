@@ -22,5 +22,6 @@ data class VoiceProfile(
     val intonationScore: Int,
     val breathPauseScore: Int,
     val distortionLevel: Int,
-    val embedding: ByteArray? = null
+    val embedding: ByteArray? = null,
+    val isDraft: Boolean = false
 )
