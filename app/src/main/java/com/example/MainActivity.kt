@@ -55,6 +55,18 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        var initialTab = 0
+        var skipLanding = false
+        val shortcutAction = intent?.getStringExtra("shortcut_action")
+        if (shortcutAction == "record") {
+            initialTab = 0
+            skipLanding = true
+        } else if (shortcutAction == "synthesis") {
+            initialTab = 1
+            skipLanding = true
+        }
+        
         setContent {
             MyApplicationTheme {
                 // Ensure correct right-to-left layout for Hebrew language support
@@ -63,7 +75,9 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize()
                     ) { innerPadding ->
                         VoiceClonerAppScreen(
-                            modifier = Modifier.padding(innerPadding)
+                            modifier = Modifier.padding(innerPadding),
+                            initialTab = initialTab,
+                            skipLanding = skipLanding
                         )
                     }
                 }
@@ -76,7 +90,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun VoiceClonerAppScreen(
     modifier: Modifier = Modifier,
-    viewModel: VoiceClonerViewModel = viewModel()
+    viewModel: VoiceClonerViewModel = viewModel(),
+    initialTab: Int = 0,
+    skipLanding: Boolean = false
 ) {
     val profiles by viewModel.allProfiles.collectAsStateWithLifecycle()
     val isRecording by viewModel.isRecording.collectAsStateWithLifecycle()
@@ -89,8 +105,8 @@ fun VoiceClonerAppScreen(
     val synthesizeError by viewModel.synthesizeError.collectAsStateWithLifecycle()
     val isPlayingProfileId by viewModel.isPlayingProfileId.collectAsStateWithLifecycle()
 
-    var showLandingPage by remember { mutableStateOf(true) }
-    var currentTab by remember { mutableStateOf(0) }
+    var showLandingPage by remember { mutableStateOf(!skipLanding) }
+    var currentTab by remember { mutableStateOf(initialTab) }
     val templates by viewModel.allStyleTemplates.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
@@ -1880,6 +1896,19 @@ fun VoiceProfileCard(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
+                    val speechRecognizerLauncher = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.StartActivityForResult()
+                    ) { result ->
+                        if (result.resultCode == android.app.Activity.RESULT_OK) {
+                            val data = result.data
+                            val matches = data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)
+                            if (!matches.isNullOrEmpty()) {
+                                val newText = if (synthText.isNotEmpty()) synthText + " " + matches[0] else matches[0]
+                                onSynthTextChange(newText)
+                            }
+                        }
+                    }
+
                     OutlinedTextField(
                         value = synthText,
                         onValueChange = onSynthTextChange,
@@ -1888,7 +1917,23 @@ fun VoiceProfileCard(
                             .fillMaxWidth()
                             .testTag("synth_text_input_${profile.id}"),
                         maxLines = 3,
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        trailingIcon = {
+                            IconButton(onClick = {
+                                val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                    putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                    putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "he-IL")
+                                    putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "דבר עכשיו...")
+                                }
+                                try {
+                                    speechRecognizerLauncher.launch(intent)
+                                } catch (e: Exception) {
+                                    android.util.Log.e("SpeechToText", "Speech recognition not available", e)
+                                }
+                            }) {
+                                Icon(Icons.Default.Mic, contentDescription = "הקלט טקסט בקול", tint = MaterialTheme.colorScheme.primary)
+                            }
+                        }
                     )
 
                     Spacer(modifier = Modifier.height(6.dp))
@@ -3073,6 +3118,60 @@ fun SettingsDialog(
                         sdf.format(java.util.Date(selectedDateMillis!!))
                     } else "בחר תאריך יעד..."
                     Text(text = dateStr, fontSize = 16.sp)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "גיבוי ענן ושחזור (Drive)",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "ייצא את הנתונים שלך לענן כדי לגבות אותם או לשחזר אותם במכשיר אחר.",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+
+                OutlinedButton(
+                    onClick = { 
+                        android.widget.Toast.makeText(context, "פותח חיבור לכונן ענן...", android.widget.Toast.LENGTH_SHORT).show()
+                        // Simulate Drive Backup connection intent or start activity
+                    },
+                    modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("גיבוי לענן", fontSize = 16.sp)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "פתרון בעיות (Troubleshooting)",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                
+                Button(
+                    onClick = {
+                        val browserIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://aistudio.voicecloner.com/support"))
+                        try {
+                            context.startActivity(browserIntent)
+                        } catch(e: Exception) {}
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                    modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Info, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("עזרה ופתרון בעיות", fontSize = 16.sp)
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))

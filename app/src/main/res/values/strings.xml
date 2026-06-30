@@ -8,4 +8,10 @@
     <string name="play_store_category">Audio / Synthesis Tools</string>
     <string name="play_store_content_rating">Everyone (PEGI 3)</string>
     <string name="play_store_privacy_policy">https://aistudio.voicecloner.com/privacy</string>
+    <string name="shortcut_record_short">הקלטה</string>
+    <string name="shortcut_record_long">הקלטת פרופיל קול חדש</string>
+    <string name="shortcut_record_disabled">הקלטה לא זמינה</string>
+    <string name="shortcut_synth_short">סינתזה</string>
+    <string name="shortcut_synth_long">צור דיבור חדש</string>
+    <string name="shortcut_synth_disabled">סינתזה לא זמינה</string>
 </resources>

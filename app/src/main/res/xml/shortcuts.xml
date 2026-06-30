@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="new_recording"
+        android:enabled="true"
+        android:icon="@android:drawable/ic_btn_speak_now"
+        android:shortcutShortLabel="@string/shortcut_record_short"
+        android:shortcutLongLabel="@string/shortcut_record_long"
+        android:shortcutDisabledMessage="@string/shortcut_record_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.aistudio.voicecloner.abcvdx"
+            android:targetClass="com.example.MainActivity">
+            <extra android:name="shortcut_action" android:value="record" />
+        </intent>
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="synthesis"
+        android:enabled="true"
+        android:icon="@android:drawable/ic_media_play"
+        android:shortcutShortLabel="@string/shortcut_synth_short"
+        android:shortcutLongLabel="@string/shortcut_synth_long"
+        android:shortcutDisabledMessage="@string/shortcut_synth_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.aistudio.voicecloner.abcvdx"
+            android:targetClass="com.example.MainActivity">
+            <extra android:name="shortcut_action" android:value="synthesis" />
+        </intent>
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+</shortcuts>
