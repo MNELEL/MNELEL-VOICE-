@@ -815,49 +815,10 @@ fun VoiceClonerAppScreen(
 
                                 audioAnalysisResult?.let { result ->
                                     Spacer(modifier = Modifier.height(12.dp))
-                                    Card(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                                        shape = RoundedCornerShape(12.dp)
-                                    ) {
-                                        Column(modifier = Modifier.padding(16.dp)) {
-                                            Text("פרמטרים פונטיים:", fontWeight = FontWeight.Bold)
-                                            Text(result.phoneticParameters, fontSize = 14.sp)
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            Text("תדרי פיץ':", fontWeight = FontWeight.Bold)
-                                            Text(result.pitchFrequencies, fontSize = 14.sp)
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            Text("רמות רעש רקע:", fontWeight = FontWeight.Bold)
-                                            Text(result.backgroundNoiseLevels, fontSize = 14.sp)
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            Text("טביעת קול (Voice Print):", fontWeight = FontWeight.Bold)
-                                            Text(result.voicePrint, fontSize = 14.sp)
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            Text("עומק גרוני (Guttural Depth):", fontWeight = FontWeight.Bold)
-                                            Text(result.gutturalDepth, fontSize = 14.sp)
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            Text("חיתוך דיבור ודיקציה:", fontWeight = FontWeight.Bold)
-                                            Text(result.dictionAndClipping, fontSize = 14.sp)
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            Text("גוון קול וסגנון:", fontWeight = FontWeight.Bold)
-                                            Text(result.voiceToneAndStyle, fontSize = 14.sp)
-                                            Spacer(modifier = Modifier.height(12.dp))
-                                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                                            Text(result.overallSummary, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
-                                            
-                                            Spacer(modifier = Modifier.height(16.dp))
-                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                                OutlinedButton(
-                                                    onClick = { viewModel.exportAnalysisToJson(context) },
-                                                    modifier = Modifier.weight(1f).padding(end = 4.dp)
-                                                ) {
-                                                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                    Spacer(modifier = Modifier.width(4.dp))
-                                                    Text("גיבוי נתונים ל-JSON", fontSize = 12.sp)
-                                                }
-                                            }
-                                        }
-                                    }
+                                    com.example.ui.AcousticAnalysisDashboard(
+                                        result = result,
+                                        onExport = { viewModel.exportAnalysisToJson(context) }
+                                    )
                                 }
 
                                 Spacer(modifier = Modifier.height(8.dp))
