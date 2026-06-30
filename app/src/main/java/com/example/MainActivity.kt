@@ -756,147 +756,35 @@ fun VoiceClonerAppScreen(
                             }
 
                             // Shared Section: If sample loaded (recorded or uploaded)
-                            if (recordedFile != null) {
+                            val currentRecordedFile = recordedFile
+                            if (currentRecordedFile != null) {
                                 Spacer(modifier = Modifier.height(20.dp))
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .glassmorphic(shape = RoundedCornerShape(12.dp), elevation = 2.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                                    shape = RoundedCornerShape(12.dp)
-                                 ) {
-                                    Column(
-                                        modifier = Modifier.padding(12.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "דגימת קול טעונה לשיבוט 🎙️",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    IconButton(
+                                        onClick = { viewModel.clearRecordedFile() }
                                     ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Info,
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.primary
-                                                )
-                                                Text(
-                                                    text = "דגימת קול מוכנה לשיבוט",
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontSize = 14.sp,
-                                                    color = MaterialTheme.colorScheme.primary
-                                                )
-                                            }
-
-                                            // Clear Button
-                                            IconButton(
-                                                onClick = {
-                                                    viewModel.clearRecordedFile()
-                                                }
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Delete,
-                                                    contentDescription = "מחק דגימה",
-                                                    tint = MaterialTheme.colorScheme.error
-                                                )
-                                            }
-                                        }
-
-                                        Spacer(modifier = Modifier.height(8.dp))
-
-                                        // Listen to chosen sample premium playback component
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
-                                                .border(BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)), RoundedCornerShape(12.dp))
-                                                .padding(12.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                        ) {
-                                            IconButton(
-                                                onClick = {
-                                                    if (isPlayingRecorded) {
-                                                        viewModel.stopRecordedFile()
-                                                    } else {
-                                                        viewModel.playRecordedFile()
-                                                    }
-                                                },
-                                                modifier = Modifier
-                                                    .size(44.dp)
-                                                    .clip(CircleShape)
-                                                    .background(
-                                                        if (isPlayingRecorded) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
-                                                    )
-                                            ) {
-                                                Icon(
-                                                    imageVector = if (isPlayingRecorded) Icons.Default.Close else Icons.Default.PlayArrow,
-                                                    contentDescription = "שמע דגימה",
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(22.dp)
-                                                )
-                                            }
-
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Text(
-                                                        text = if (isPlayingRecorded) "מנגן דגימת קול..." else "שמע דגימת שנטענה",
-                                                        fontSize = 14.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = MaterialTheme.colorScheme.primary
-                                                    )
-                                                    Text(
-                                                        text = if (isPlayingRecorded) "$playbackElapsedText / $playbackDurationText" else "00:00",
-                                                        fontSize = 14.sp,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                                Spacer(modifier = Modifier.height(6.dp))
-
-                                                // Real-time Static Waveform Preview of the recorded audio sample
-                                                val mockAmplitudes = remember(recordedFile) {
-                                                    List(60) { (0.1f + Math.random() * 0.8f).toFloat() }
-                                                }
-                                                StaticWaveformPreview(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .height(40.dp)
-                                                        .padding(horizontal = 8.dp),
-                                                    amplitudes = mockAmplitudes,
-                                                    progress = if (isPlayingRecorded) playbackProgress else 0f,
-                                                    activeColor = MaterialTheme.colorScheme.secondary
-                                                )
-                                                Spacer(modifier = Modifier.height(6.dp))
-
-                                                Slider(
-                                                    value = if (isPlayingRecorded) playbackProgress else 0f,
-                                                    onValueChange = { newValue ->
-                                                        if (isPlayingRecorded) {
-                                                            viewModel.seekPlayback(newValue)
-                                                        }
-                                                    },
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .height(24.dp),
-                                                    colors = SliderDefaults.colors(
-                                                        thumbColor = MaterialTheme.colorScheme.primary,
-                                                        activeTrackColor = MaterialTheme.colorScheme.primary,
-                                                        inactiveTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                                    )
-                                                )
-                                            }
-                                        }
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "מחק דגימה",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
                                     }
                                 }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                com.example.ui.VoiceSampleAudioPlayer(
+                                    viewModel = viewModel,
+                                    recordedFile = currentRecordedFile
+                                )
 
                                 Spacer(modifier = Modifier.height(16.dp))
                                 HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
@@ -1413,7 +1301,10 @@ fun VoiceClonerAppScreen(
                     onSelectProfile = { /* Handle selection (e.g. switch to current tab 0) */ },
                     onDeleteProfile = { viewModel.deleteProfile(it.id) },
                     onRenameProfile = { profile, newName -> viewModel.renameProfile(profile.id, newName) },
-                    onExportProfile = { profile -> viewModel.exportProfileToJson(profile, context) }
+                    onExportProfile = { profile -> viewModel.exportProfileToJson(profile, context) },
+                    playingProfileId = isPlayingProfileId,
+                    onPlayProfileSample = { viewModel.playProfileSample(it) },
+                    onStopProfileSample = { viewModel.stopProfileSample() }
                 )
             }
             8 -> {

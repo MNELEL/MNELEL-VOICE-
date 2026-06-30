@@ -9,6 +9,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,7 +26,10 @@ fun VoiceProfileGallery(
     onDeleteProfile: (VoiceProfile) -> Unit,
     onRenameProfile: (VoiceProfile, String) -> Unit,
     onExportProfile: (VoiceProfile) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    playingProfileId: Int? = null,
+    onPlayProfileSample: ((VoiceProfile) -> Unit)? = null,
+    onStopProfileSample: (() -> Unit)? = null
 ) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 150.dp),
@@ -39,7 +44,10 @@ fun VoiceProfileGallery(
                 onClick = { onSelectProfile(profile) },
                 onDelete = { onDeleteProfile(profile) },
                 onRename = { newName -> onRenameProfile(profile, newName) },
-                onExport = { onExportProfile(profile) }
+                onExport = { onExportProfile(profile) },
+                playingProfileId = playingProfileId,
+                onPlayProfileSample = onPlayProfileSample,
+                onStopProfileSample = onStopProfileSample
             )
         }
     }
@@ -51,7 +59,10 @@ fun VoiceProfileGalleryItem(
     onClick: () -> Unit,
     onDelete: () -> Unit,
     onRename: (String) -> Unit,
-    onExport: () -> Unit
+    onExport: () -> Unit,
+    playingProfileId: Int? = null,
+    onPlayProfileSample: ((VoiceProfile) -> Unit)? = null,
+    onStopProfileSample: (() -> Unit)? = null
 ) {
     var showRenameDialog by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf(profile.name) }
@@ -84,16 +95,33 @@ fun VoiceProfileGalleryItem(
             
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onExport) {
-                    Icon(Icons.Default.Share, contentDescription = "Export")
+                if (profile.audioPath != null && onPlayProfileSample != null && onStopProfileSample != null) {
+                    val isPlaying = playingProfileId == profile.id
+                    IconButton(
+                        onClick = {
+                            if (isPlaying) onStopProfileSample() else onPlayProfileSample(profile)
+                        },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Close else Icons.Default.PlayArrow,
+                            contentDescription = if (isPlaying) "Stop" else "Play",
+                            tint = if (isPlaying) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
-                IconButton(onClick = { showRenameDialog = true }) {
-                    Icon(Icons.Default.Edit, contentDescription = "Rename")
+                IconButton(onClick = onExport, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.Share, contentDescription = "Export", modifier = Modifier.size(18.dp))
                 }
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                IconButton(onClick = { showRenameDialog = true }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.Edit, contentDescription = "Rename", modifier = Modifier.size(18.dp))
+                }
+                IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
                 }
             }
         }
