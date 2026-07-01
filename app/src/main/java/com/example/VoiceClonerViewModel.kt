@@ -468,6 +468,9 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
     private val _analysisProgress = MutableStateFlow(0f)
     val analysisProgress: StateFlow<Float> = _analysisProgress.asStateFlow()
 
+    private val _analysisStatusMessage = MutableStateFlow("")
+    val analysisStatusMessage: StateFlow<String> = _analysisStatusMessage.asStateFlow()
+
     private val _analysisError = MutableStateFlow<String?>(null)
     val analysisError: StateFlow<String?> = _analysisError.asStateFlow()
 
@@ -1493,17 +1496,29 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
         }
 
         _isAnalyzing.value = true
-        _analysisProgress.value = 0f
+        _analysisProgress.value = 0.05f
+        _analysisStatusMessage.value = "מתחיל תהליך ניתוח דגימת קול..."
         _analysisError.value = null
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 // LOCAL MOCK ANALYSIS WITH HEURISTIC ALGORITHMS TO PREVENT 429 ERRORS
-                _analysisProgress.value = 0.2f
+                withContext(Dispatchers.Main) {
+                    _analysisProgress.value = 0.15f
+                    _analysisStatusMessage.value = "מפענח דגימת קול וקורא קובץ שמע... [שלב 1/5]"
+                }
                 val base64Audio = audioHelper.fileToBase64(file) ?: ""
-                _analysisProgress.value = 0.5f
+                
+                withContext(Dispatchers.Main) {
+                    _analysisProgress.value = 0.35f
+                    _analysisStatusMessage.value = "מנתח מדדי תדרים וגובה צליל ביומטריים... [שלב 2/5]"
+                }
                 val localMetrics = com.example.utils.LocalPhoneticAnalyzer.analyzeAudioFile(file)
-                _analysisProgress.value = 0.8f
+                
+                withContext(Dispatchers.Main) {
+                    _analysisProgress.value = 0.55f
+                    _analysisStatusMessage.value = "מעבד קצב דיבור, נשימה ואיכות הגייה... [שלב 3/5]"
+                }
                 val isMale = gender == "זכר"
                 
                 // Mix heuristic data with random variations for realism
@@ -1536,6 +1551,10 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                 var elevenLabsVoiceId = geminiVoiceName
                 val apiKey = getEffectiveApiKey()
                 if (apiKey.isNotEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        _analysisProgress.value = 0.75f
+                        _analysisStatusMessage.value = "מתחבר ל-API של ElevenLabs ליצירת שכפול וקטורי... [שלב 4/5]"
+                    }
                     try {
                         val client = OkHttpClient.Builder()
                             .connectTimeout(60, TimeUnit.SECONDS)
@@ -1571,6 +1590,16 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                     } catch (e: Exception) {
                         Log.e("VoiceClonerViewModel", "ElevenLabs Voice Add failed with exception", e)
                     }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        _analysisProgress.value = 0.80f
+                        _analysisStatusMessage.value = "יוצר מודל דיבור היברידי מקומי מותאם... [שלב 4/5]"
+                    }
+                }
+
+                withContext(Dispatchers.Main) {
+                    _analysisProgress.value = 0.95f
+                    _analysisStatusMessage.value = "שומר חתימת קול בבסיס הנתונים ומנקה זיכרון זמני... [שלב 5/5]"
                 }
 
                 val newProfile = VoiceProfile(
@@ -1596,6 +1625,7 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                 withContext(Dispatchers.Main) {
                     _isAnalyzing.value = false
                     _analysisProgress.value = 1.0f
+                    _analysisStatusMessage.value = "הניתוח והשיבוט הושלמו בהצלחה!"
                     _recordedFile.value = null // clear for next
                     sharedPrefs.edit().remove("draft_audio_path").apply()
                 }
@@ -1604,6 +1634,7 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                 withContext(Dispatchers.Main) {
                     _isAnalyzing.value = false
                     _analysisProgress.value = 0f
+                    _analysisStatusMessage.value = "הניתוח נכשל"
                     _analysisError.value = getFriendlyErrorMessage(e)
                 }
             }

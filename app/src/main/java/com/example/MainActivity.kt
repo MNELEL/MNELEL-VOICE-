@@ -99,6 +99,8 @@ fun VoiceClonerAppScreen(
     val isRecording by viewModel.isRecording.collectAsStateWithLifecycle()
     val recordedFile by viewModel.recordedFile.collectAsStateWithLifecycle()
     val isAnalyzing by viewModel.isAnalyzing.collectAsStateWithLifecycle()
+    val analysisProgress by viewModel.analysisProgress.collectAsStateWithLifecycle()
+    val analysisStatusMessage by viewModel.analysisStatusMessage.collectAsStateWithLifecycle()
     val isGeminiAnalyzingAudio by viewModel.isGeminiAnalyzingAudio.collectAsStateWithLifecycle()
     val analysisError by viewModel.analysisError.collectAsStateWithLifecycle()
     val audioAnalysisResult by viewModel.audioAnalysisResult.collectAsStateWithLifecycle()
@@ -965,39 +967,44 @@ fun VoiceClonerAppScreen(
                                             fontSize = 15.sp,
                                             color = MaterialTheme.colorScheme.primary
                                         )
-                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "שלב התקדמות הניתוח:",
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 13.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = "${(analysisProgress * 100).toInt()}%",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
                                         LinearProgressIndicator(
+                                            progress = { analysisProgress },
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .height(4.dp)
-                                                .clip(RoundedCornerShape(2.dp)),
+                                                .height(8.dp)
+                                                .clip(RoundedCornerShape(4.dp)),
                                             color = MaterialTheme.colorScheme.secondary,
-                                            trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                            trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                                         )
                                         Spacer(modifier = Modifier.height(12.dp))
                                         
-                                        // Dynamic stepping logs
-                                        val stepText = remember {
-                                            listOf(
-                                                "מפענח דגימת הקול שהוזנה...",
-                                                "מסננן רעשי רקע ותדרים משניים...",
-                                                "מנתח גוון קול, גובה ותווים פיזיקליים...",
-                                                "משלב חתימת קול עם מודל השפה של Gemini...",
-                                                "מייצר פרופיל קול דיגיטלי מותאם אישית..."
-                                            )
-                                        }
-                                        var currentStepIdx by remember { mutableStateOf(0) }
-                                        LaunchedEffect(Unit) {
-                                            while (true) {
-                                                kotlinx.coroutines.delay(2000)
-                                                currentStepIdx = (currentStepIdx + 1) % stepText.size
-                                            }
-                                        }
-                                        
+                                        val displayStatus = analysisStatusMessage.ifEmpty { "מפענח דגימת קול וקורא קובץ שמע... [שלב 1/5]" }
                                         Text(
-                                            text = stepText[currentStepIdx],
+                                            text = displayStatus,
                                             fontSize = 14.sp,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
                                             textAlign = TextAlign.Center
                                         )
                                     }

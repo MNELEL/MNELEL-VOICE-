@@ -2317,6 +2317,8 @@ fun LocalSignaturesManager(
     val liveAmplitude = viewModel?.liveAmplitude?.collectAsStateWithLifecycle()?.value ?: 0f
     val recordedFile = viewModel?.recordedFile?.collectAsStateWithLifecycle()?.value
     val isAnalyzing = viewModel?.isAnalyzing?.collectAsStateWithLifecycle()?.value ?: false
+    val analysisProgress = viewModel?.analysisProgress?.collectAsStateWithLifecycle()?.value ?: 0f
+    val analysisStatusMessage = viewModel?.analysisStatusMessage?.collectAsStateWithLifecycle()?.value ?: ""
     val analysisError = viewModel?.analysisError?.collectAsStateWithLifecycle()?.value
 
     var isWaitingForSignatureSave by remember { mutableStateOf(false) }
@@ -2528,14 +2530,47 @@ fun LocalSignaturesManager(
 
                         // Local loading/error indicators inside the recorder
                         if (isAnalyzing) {
-                            LinearProgressIndicator(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(4.dp)
-                                    .clip(RoundedCornerShape(2.dp)),
-                                color = LightPrimary,
-                                trackColor = LightPrimary.copy(alpha = 0.1f)
-                            )
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "התקדמות שיבוט AI:",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = LightPrimary
+                                    )
+                                    Text(
+                                        text = "${(analysisProgress * 100).toInt()}%",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = LightPrimary
+                                    )
+                                }
+                                LinearProgressIndicator(
+                                    progress = { analysisProgress },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(6.dp)
+                                        .clip(RoundedCornerShape(3.dp)),
+                                    color = LightPrimary,
+                                    trackColor = LightPrimary.copy(alpha = 0.15f)
+                                )
+                                Text(
+                                    text = analysisStatusMessage.ifEmpty { "מנתח ומעבד דגימת קול..." },
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(top = 2.dp)
+                                )
+                            }
                         }
 
                         analysisError?.let { err ->
