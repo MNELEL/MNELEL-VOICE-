@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.isActive
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -610,6 +611,14 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
 
     private val _isSynthesizingLongText = MutableStateFlow(false)
     val isSynthesizingLongText: StateFlow<Boolean> = _isSynthesizingLongText.asStateFlow()
+
+    private var longTextSynthJob: kotlinx.coroutines.Job? = null
+
+    fun cancelLongSynth() {
+        longTextSynthJob?.cancel()
+        _isSynthesizingLongText.value = false
+        _longTextStatus.value = "הייצור בוטל"
+    }
 
     private val _longTextProgress = MutableStateFlow(0f)
     val longTextProgress: StateFlow<Float> = _longTextProgress.asStateFlow()
@@ -1259,18 +1268,22 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
             return
         }
 
+        longTextSynthJob?.cancel()
         _isSynthesizingLongText.value = true
         _longTextProgress.value = 0f
         _longTextStatus.value = "מכין קבצים..."
         _synthesizeError.value = null
 
-        viewModelScope.launch(Dispatchers.IO) {
+        longTextSynthJob = viewModelScope.launch(Dispatchers.IO) {
             try {
                 val chunks = splitTextIntoChunks(text, 4000)
                 val totalChunks = chunks.size
                 val tempFiles = mutableListOf<File>()
 
                 for (i in chunks.indices) {
+                    if (!isActive || !_isSynthesizingLongText.value) {
+                        throw kotlinx.coroutines.CancellationException("Synthesis was cancelled")
+                    }
                     val currentChunk = chunks[i]
                     withContext(Dispatchers.Main) {
                         _longTextStatus.value = "מעבד חלק ${i + 1} מתוך $totalChunks..."
@@ -1291,6 +1304,10 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                     } else {
                         throw IllegalStateException("ייצור חלק ${i + 1} נכשל")
                     }
+                }
+
+                if (!isActive || !_isSynthesizingLongText.value) {
+                    throw kotlinx.coroutines.CancellationException("Synthesis was cancelled")
                 }
 
                 withContext(Dispatchers.Main) {
@@ -1336,6 +1353,11 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
                     _longTextProgress.value = 1f
                     _longTextStatus.value = "הייצור הושלם בהצלחה!"
                     playResultSample(newResult)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                withContext(Dispatchers.Main) {
+                    _isSynthesizingLongText.value = false
+                    _longTextStatus.value = "הייצור בוטל"
                 }
             } catch (e: Exception) {
                 Log.e("VoiceClonerViewModel", "Long text synthesis failed", e)

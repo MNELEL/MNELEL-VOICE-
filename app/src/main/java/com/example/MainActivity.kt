@@ -473,7 +473,7 @@ fun VoiceClonerAppScreen(
                     val items = listOf(
                         Triple("בית", Icons.Default.Home, 0),
                         Triple("סינתזה", Icons.Default.PlayArrow, 1),
-                        Triple("סטודיו", Icons.Default.Star, 11),
+                        Triple("סטודיו", Icons.Default.Mic, 11),
                         Triple("כלים", Icons.Default.Build, 8),
                         Triple("גלריה", Icons.Default.Person, 7)
                     )
@@ -512,9 +512,11 @@ fun VoiceClonerAppScreen(
                                 currentTab = item.third
                             },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.onPrimary,
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                indicatorColor = MaterialTheme.colorScheme.primary
+                                selectedIconColor = LightPrimary,
+                                selectedTextColor = LightPrimary,
+                                unselectedIconColor = SoftMuted,
+                                unselectedTextColor = SoftMuted,
+                                indicatorColor = LightPrimary.copy(alpha = 0.12f)
                             )
                         )
                     }
