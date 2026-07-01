@@ -35,8 +35,10 @@ fun PodcastStudioScreen(
     profiles: List<VoiceProfile>
 ) {
     val context = LocalContext.current
+    val sharedPrefs = remember { context.getSharedPreferences("podcast_studio_prefs", android.content.Context.MODE_PRIVATE) }
     var textInput by remember { mutableStateOf("") }
     var selectedProfile by remember { mutableStateOf<VoiceProfile?>(null) }
+    var lastSavedTime by remember { mutableStateOf<String?>(null) }
     
     val isSynthesizingLongText by viewModel.isSynthesizingLongText.collectAsStateWithLifecycle()
     val longTextProgress by viewModel.longTextProgress.collectAsStateWithLifecycle()
@@ -45,6 +47,49 @@ fun PodcastStudioScreen(
     
     val recentGenerations by viewModel.recentGenerations.collectAsStateWithLifecycle()
     val isPlayingResultId by viewModel.isPlayingResultId.collectAsStateWithLifecycle()
+
+    // Load saved draft on initial launch
+    LaunchedEffect(Unit) {
+        val savedDraft = sharedPrefs.getString("text_draft", "") ?: ""
+        if (savedDraft.isNotEmpty()) {
+            textInput = savedDraft
+            val savedTime = sharedPrefs.getString("text_draft_time", "") ?: ""
+            if (savedTime.isNotEmpty()) {
+                lastSavedTime = savedTime
+            }
+        }
+    }
+
+    // Auto-save logic: Periodic save every 30 seconds
+    val currentTextForPeriodic by rememberUpdatedState(textInput)
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(30_000L)
+            if (currentTextForPeriodic.isNotEmpty()) {
+                sharedPrefs.edit()
+                    .putString("text_draft", currentTextForPeriodic)
+                    .apply()
+                val sdf = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+                val formattedTime = sdf.format(java.util.Date())
+                sharedPrefs.edit().putString("text_draft_time", formattedTime).apply()
+                lastSavedTime = formattedTime
+            }
+        }
+    }
+
+    // Auto-save logic: Debounced save on typing pause
+    LaunchedEffect(textInput) {
+        if (textInput.isNotEmpty()) {
+            kotlinx.coroutines.delay(1500L) // Wait 1.5 seconds after typing stops
+            sharedPrefs.edit()
+                .putString("text_draft", textInput)
+                .apply()
+            val sdf = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+            val formattedTime = sdf.format(java.util.Date())
+            sharedPrefs.edit().putString("text_draft_time", formattedTime).apply()
+            lastSavedTime = formattedTime
+        }
+    }
 
     LaunchedEffect(profiles) {
         if (profiles.isNotEmpty() && selectedProfile == null) {
@@ -183,12 +228,52 @@ fun PodcastStudioScreen(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    TextButton(
-                        onClick = { textInput = demoText }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("טען טקסט לדוגמה", fontSize = 13.sp)
+                        lastSavedTime?.let { time ->
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = Color(0xFF4CAF50),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = "טיוטה נשמרה $time",
+                                fontSize = 11.sp,
+                                color = Color(0xFF4CAF50),
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                        }
+
+                        if (textInput.isNotEmpty()) {
+                            IconButton(
+                                onClick = {
+                                    textInput = ""
+                                    sharedPrefs.edit().remove("text_draft").remove("text_draft_time").apply()
+                                    lastSavedTime = null
+                                },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "נקה טקסט",
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+
+                        TextButton(
+                            onClick = { textInput = demoText },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("טען טקסט לדוגמה", fontSize = 12.sp)
+                        }
                     }
                 }
                 
