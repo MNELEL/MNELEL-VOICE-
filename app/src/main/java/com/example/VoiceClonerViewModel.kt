@@ -235,14 +235,40 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
         _textQueue.value = emptyList()
     }
 
+    suspend fun playAudioSuspend(file: File) = kotlinx.coroutines.suspendCancellableCoroutine<Unit> { continuation ->
+        audioHelper.playAudio(file) {
+            if (continuation.isActive) {
+                continuation.resume(Unit, onCancellation = {})
+            }
+        }
+        continuation.invokeOnCancellation {
+            audioHelper.stopPlayback()
+        }
+    }
+
     fun playQueue(profile: VoiceProfile) {
-        viewModelScope.launch {
-            val queue = _textQueue.value
-            for (text in queue) {
-                synthesizeText(text, profile)
-                // Need a way to wait for synthesis and playback to finish?
-                // The current synthesizeText launches a coroutine. 
-                // Maybe I need a suspend version of synthesizeText?
+        _isQueueProcessing.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val queue = _textQueue.value
+                for (i in queue.indices) {
+                    _currentQueueIndex.value = i
+                    val text = queue[i]
+                    
+                    val file = synthesizeTextSuspend(text, profile)
+                    if (file != null && file.exists()) {
+                        withContext(Dispatchers.Main) {
+                            playAudioSuspend(file)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("VoiceClonerViewModel", "playQueue error", e)
+            } finally {
+                withContext(Dispatchers.Main) {
+                    _isQueueProcessing.value = false
+                    _currentQueueIndex.value = -1
+                }
             }
         }
     }
@@ -578,6 +604,15 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
     // Synthesis States
     private val _isSynthesizing = MutableStateFlow(false)
     val isSynthesizing: StateFlow<Boolean> = _isSynthesizing.asStateFlow()
+
+    private val _isSynthesizingLongText = MutableStateFlow(false)
+    val isSynthesizingLongText: StateFlow<Boolean> = _isSynthesizingLongText.asStateFlow()
+
+    private val _longTextProgress = MutableStateFlow(0f)
+    val longTextProgress: StateFlow<Float> = _longTextProgress.asStateFlow()
+
+    private val _longTextStatus = MutableStateFlow("")
+    val longTextStatus: StateFlow<String> = _longTextStatus.asStateFlow()
 
     private val _synthesizeError = MutableStateFlow<String?>(null)
     val synthesizeError: StateFlow<String?> = _synthesizeError.asStateFlow()
@@ -1106,6 +1141,208 @@ class VoiceClonerViewModel(application: Application) : AndroidViewModel(applicat
 
     // Result cache for synthesis (Text + ProfileId)
     private val synthesisCache = mutableMapOf<String, String>()
+
+    fun splitTextIntoChunks(text: String, maxChunkSize: Int = 4000): List<String> {
+        val chunks = mutableListOf<String>()
+        val paragraphs = text.split("\n")
+        var currentChunk = StringBuilder()
+
+        for (paragraph in paragraphs) {
+            if (paragraph.isBlank()) continue
+            if (currentChunk.length + paragraph.length + 1 > maxChunkSize) {
+                if (currentChunk.isNotEmpty()) {
+                    chunks.add(currentChunk.toString().trim())
+                    currentChunk = StringBuilder()
+                }
+                
+                if (paragraph.length > maxChunkSize) {
+                    val sentences = paragraph.split(Regex("(?<=[.!?])\\s+"))
+                    for (sentence in sentences) {
+                        if (currentChunk.length + sentence.length + 1 > maxChunkSize) {
+                            if (currentChunk.isNotEmpty()) {
+                                chunks.add(currentChunk.toString().trim())
+                                currentChunk = StringBuilder()
+                            }
+                            if (sentence.length > maxChunkSize) {
+                                var start = 0
+                                while (start < sentence.length) {
+                                    val end = minOf(start + maxChunkSize, sentence.length)
+                                    chunks.add(sentence.substring(start, end).trim())
+                                    start = end
+                                }
+                            } else {
+                                currentChunk.append(sentence).append(" ")
+                            }
+                        } else {
+                            currentChunk.append(sentence).append(" ")
+                        }
+                    }
+                } else {
+                    currentChunk.append(paragraph).append("\n")
+                }
+            } else {
+                currentChunk.append(paragraph).append("\n")
+            }
+        }
+        if (currentChunk.isNotEmpty()) {
+            chunks.add(currentChunk.toString().trim())
+        }
+        return chunks.filter { it.isNotBlank() }
+    }
+
+    suspend fun synthesizeTextSuspend(
+        text: String,
+        profile: VoiceProfile,
+        pitchTuningPercent: Float = 0f,
+        speedTuningPercent: Float = 0f,
+        vibeModifier: String = "מקורי",
+        accent: String = "Standard"
+    ): File? = withContext(Dispatchers.IO) {
+        try {
+            val apiKey = getEffectiveApiKey()
+            if (apiKey.isEmpty()) {
+                throw IllegalStateException("אנא הגדר מפתח ElevenLabs API תקין")
+            }
+
+            val voiceId = when (profile.geminiVoiceName) {
+                "Puck" -> "pNInz6obpg7jWK9vYGCY"
+                "Kore" -> "21m00Tcm4TlvDq8ikWAM"
+                "Fenrir" -> "ErXwobaYiN019PkySvjV"
+                else -> if (profile.geminiVoiceName.isNotBlank() && profile.geminiVoiceName != "Custom Cloned") profile.geminiVoiceName else "AZnzlk1XvdvUeBnXmlld"
+            }
+
+            val requestJson = JSONObject().apply {
+                put("text", text)
+                put("model_id", "eleven_multilingual_v2")
+                put("voice_settings", JSONObject().apply {
+                    put("stability", 0.5)
+                    put("similarity_boost", 0.75)
+                })
+            }
+
+            val mediaType = "application/json; charset=utf-8".toMediaType()
+            val requestBody = requestJson.toString().toRequestBody(mediaType)
+            val request = Request.Builder()
+                .url("https://api.elevenlabs.io/v1/text-to-speech/$voiceId")
+                .header("xi-api-key", apiKey)
+                .post(requestBody)
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            if (!response.isSuccessful) {
+                throw IllegalStateException("ElevenLabs API returned code ${response.code}")
+            }
+
+            val audioBytes = response.body?.bytes() ?: throw IllegalStateException("Empty body received")
+            val base64Str = Base64.encodeToString(audioBytes, Base64.NO_WRAP)
+            
+            audioHelper.saveBase64ToPersistentFile(base64Str, profile.name)
+        } catch (e: Exception) {
+            Log.e("VoiceClonerViewModel", "Error in synthesizeTextSuspend", e)
+            null
+        }
+    }
+
+    fun synthesizeLongText(
+        text: String,
+        profile: VoiceProfile,
+        pitchTuningPercent: Float = 0f,
+        speedTuningPercent: Float = 0f,
+        vibeModifier: String = "מקורי",
+        accent: String = "Standard"
+    ) {
+        if (text.isBlank()) {
+            _synthesizeError.value = "אנא הזן טקסט לייצור קול"
+            return
+        }
+
+        _isSynthesizingLongText.value = true
+        _longTextProgress.value = 0f
+        _longTextStatus.value = "מכין קבצים..."
+        _synthesizeError.value = null
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val chunks = splitTextIntoChunks(text, 4000)
+                val totalChunks = chunks.size
+                val tempFiles = mutableListOf<File>()
+
+                for (i in chunks.indices) {
+                    val currentChunk = chunks[i]
+                    withContext(Dispatchers.Main) {
+                        _longTextStatus.value = "מעבד חלק ${i + 1} מתוך $totalChunks..."
+                        _longTextProgress.value = i.toFloat() / totalChunks
+                    }
+
+                    val chunkFile = synthesizeTextSuspend(
+                        text = currentChunk,
+                        profile = profile,
+                        pitchTuningPercent = pitchTuningPercent,
+                        speedTuningPercent = speedTuningPercent,
+                        vibeModifier = vibeModifier,
+                        accent = accent
+                    )
+
+                    if (chunkFile != null && chunkFile.exists()) {
+                        tempFiles.add(chunkFile)
+                    } else {
+                        throw IllegalStateException("ייצור חלק ${i + 1} נכשל")
+                    }
+                }
+
+                withContext(Dispatchers.Main) {
+                    _longTextStatus.value = "ממזג חלקי שמע..."
+                    _longTextProgress.value = 0.95f
+                }
+
+                val persistentDir = File(getApplication<Application>().filesDir, "cloned_voices")
+                if (!persistentDir.exists()) {
+                    persistentDir.mkdirs()
+                }
+                val sanitizedPrefix = profile.name.replace(Regex("[^a-zA-Z0-9_]"), "_")
+                val mergedFile = File(persistentDir, "podcast_${sanitizedPrefix}_${System.currentTimeMillis()}.mp3")
+
+                FileOutputStream(mergedFile).use { fos ->
+                    for (file in tempFiles) {
+                        file.inputStream().use { fis ->
+                            fis.copyTo(fos)
+                        }
+                    }
+                }
+
+                // Delete temporary chunk files
+                for (file in tempFiles) {
+                    try {
+                        file.delete()
+                    } catch (e: Exception) {
+                        Log.e("VoiceClonerViewModel", "Failed to delete temp chunk file: ${file.absolutePath}", e)
+                    }
+                }
+
+                // Save result to DB
+                val newResult = VoiceGenerationResult(
+                    profileId = profile.id,
+                    profileName = profile.name,
+                    inputText = if (text.length > 200) text.take(200) + "..." else text,
+                    audioPath = mergedFile.absolutePath
+                )
+                voiceDao.insertGenerationResult(newResult)
+
+                withContext(Dispatchers.Main) {
+                    _isSynthesizingLongText.value = false
+                    _longTextProgress.value = 1f
+                    _longTextStatus.value = "הייצור הושלם בהצלחה!"
+                    playResultSample(newResult)
+                }
+            } catch (e: Exception) {
+                Log.e("VoiceClonerViewModel", "Long text synthesis failed", e)
+                withContext(Dispatchers.Main) {
+                    _isSynthesizingLongText.value = false
+                    _synthesizeError.value = "ייצור ארוך נכשל: ${e.message}"
+                }
+            }
+        }
+    }
 
     fun synthesizeText(
         text: String,

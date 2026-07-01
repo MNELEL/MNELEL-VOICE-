@@ -471,13 +471,38 @@ fun VoiceClonerAppScreen(
                     val items = listOf(
                         Triple("בית", Icons.Default.Home, 0),
                         Triple("סינתזה", Icons.Default.PlayArrow, 1),
+                        Triple("סטודיו", Icons.Default.Star, 11),
                         Triple("כלים", Icons.Default.Build, 8),
                         Triple("גלריה", Icons.Default.Person, 7)
                     )
                     items.forEach { item ->
                         val isSelected = currentTab == item.third || (item.third == 8 && (currentTab in 2..6 || currentTab == 9 || currentTab == 10))
                         NavigationBarItem(
-                            icon = { Icon(item.second, contentDescription = item.first) },
+                            icon = {
+                                Box {
+                                    Icon(item.second, contentDescription = item.first)
+                                    if (item.third == 11) {
+                                        val profileCount = profiles.size
+                                        if (profileCount > 0) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .align(Alignment.TopEnd)
+                                                    .offset(x = 8.dp, y = (-4).dp)
+                                                    .size(16.dp)
+                                                    .background(Color(0xFF4CAF50), shape = androidx.compose.foundation.shape.CircleShape),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = profileCount.toString(),
+                                                    color = Color.White,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            },
                             label = { Text(item.first, maxLines = 1, fontSize = if (isNarrow) 10.sp else 12.sp) },
                             selected = isSelected,
                             alwaysShowLabel = !isNarrow,
@@ -1279,6 +1304,12 @@ fun VoiceClonerAppScreen(
             10 -> {
                 com.example.ui.AudioBlobAnalyzerScreen(
                     viewModel = viewModel
+                )
+            }
+            11 -> {
+                com.example.ui.PodcastStudioScreen(
+                    viewModel = viewModel,
+                    profiles = profiles
                 )
             }
         }
