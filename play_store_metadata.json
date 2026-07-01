@@ -30,8 +30,8 @@
     ]
   },
   "versioning": {
-    "current_version_code": 21,
-    "current_version_name": "1.0.3",
+    "current_version_code": 23,
+    "current_version_name": "1.0.5",
     "whats_new": "Fixed mapping and debug symbols for Google Play Store upload compliance, performance improvements."
   }
 }
