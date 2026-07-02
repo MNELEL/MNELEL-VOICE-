@@ -14,8 +14,8 @@ android {
     applicationId = "com.aistudio.voicecloner.abcvdx"
     minSdk = 24
     targetSdk = 36
-    versionCode = 23
-    versionName = "1.0.5"
+    versionCode = 25
+    versionName = "25.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -128,18 +128,20 @@ dependencies {
 }
 
 tasks.register("incrementVersion") {
-    notCompatibleWithConfigurationCache("Modify build.gradle.kts file directly")
+    notCompatibleWithConfigurationCache("Modify build.gradle.kts and play_store_metadata.json directly")
     doLast {
         val gradleFile = file("build.gradle.kts")
         if (gradleFile.exists()) {
             var content = gradleFile.readText()
+            var nextVC: Int? = null
+            var nextVN: String? = null
             
             // Find versionCode
             val versionCodeRegex = """versionCode\s*=\s*(\d+)""".toRegex()
             val matchVC = versionCodeRegex.find(content)
             if (matchVC != null) {
                 val currentVC = matchVC.groupValues[1].toInt()
-                val nextVC = currentVC + 1
+                nextVC = currentVC + 1
                 content = content.replaceFirst("versionCode = $currentVC", "versionCode = $nextVC")
                 println("SUCCESS: Incremented versionCode from $currentVC to $nextVC")
             } else {
@@ -154,16 +156,16 @@ tasks.register("incrementVersion") {
                 val parts = currentVN.split(".")
                 if (parts.size >= 3) {
                     val patch = parts[2].toIntOrNull() ?: 0
-                    val nextVN = "${parts[0]}.${parts[1]}.${patch + 1}"
+                    nextVN = "${parts[0]}.${parts[1]}.${patch + 1}"
                     content = content.replaceFirst("""versionName = "$currentVN"""", """versionName = "$nextVN"""")
                     println("SUCCESS: Incremented versionName from $currentVN to $nextVN")
                 } else if (parts.size == 2) {
                     val minor = parts[1].toIntOrNull() ?: 0
-                    val nextVN = "${parts[0]}.${minor + 1}"
+                    nextVN = "${parts[0]}.${minor + 1}"
                     content = content.replaceFirst("""versionName = "$currentVN"""", """versionName = "$nextVN"""")
                     println("SUCCESS: Incremented versionName from $currentVN to $nextVN")
                 } else {
-                    val nextVN = "$currentVN.1"
+                    nextVN = "$currentVN.1"
                     content = content.replaceFirst("""versionName = "$currentVN"""", """versionName = "$nextVN"""")
                     println("SUCCESS: Setup versionName from $currentVN to $nextVN")
                 }
@@ -187,9 +189,72 @@ tasks.register("incrementVersion") {
             }
             
             gradleFile.writeText(content)
+
+            // Also update play_store_metadata.json if it exists
+            val metadataFile = project.rootDir.resolve("play_store_metadata.json")
+            if (metadataFile.exists()) {
+                var metaContent = metadataFile.readText()
+                val vcRegex = """"current_version_code"\s*:\s*(\d+)""".toRegex()
+                val vnRegex = """"current_version_name"\s*:\s*"([^"]+)"""".toRegex()
+                
+                val matchMetaVC = vcRegex.find(metaContent)
+                val matchMetaVN = vnRegex.find(metaContent)
+                
+                if (matchMetaVC != null && nextVC != null) {
+                    val currentMetaVC = matchMetaVC.groupValues[1]
+                    metaContent = metaContent.replaceFirst("\"current_version_code\": $currentMetaVC", "\"current_version_code\": $nextVC")
+                    println("SUCCESS: Updated current_version_code to $nextVC in play_store_metadata.json")
+                }
+                if (matchMetaVN != null && nextVN != null) {
+                    val currentMetaVN = matchMetaVN.groupValues[1]
+                    metaContent = metaContent.replaceFirst("\"current_version_name\": \"$currentMetaVN\"", "\"current_version_name\": \"$nextVN\"")
+                    println("SUCCESS: Updated current_version_name to \"$nextVN\" in play_store_metadata.json")
+                }
+                metadataFile.writeText(metaContent)
+            }
         } else {
             println("ERROR: build.gradle.kts file not found under ${gradleFile.absolutePath}")
         }
     }
+}
+
+tasks.register("validateVersionCode") {
+    notCompatibleWithConfigurationCache("Accesses project and android configuration at execution time")
+    doLast {
+        val metadataFile = project.rootDir.resolve("play_store_metadata.json")
+        if (metadataFile.exists()) {
+            val text = metadataFile.readText()
+            val vcRegex = """"current_version_code"\s*:\s*(\d+)""".toRegex()
+            val vnRegex = """"current_version_name"\s*:\s*"([^"]+)"""".toRegex()
+            
+            val metadataVC = vcRegex.find(text)?.groupValues?.get(1)?.toIntOrNull()
+            val metadataVN = vnRegex.find(text)?.groupValues?.get(1)
+            
+            val buildVC = android.defaultConfig.versionCode
+            val buildVN = android.defaultConfig.versionName
+            
+            if (metadataVC == null) {
+                throw GradleException("Could not parse current_version_code from play_store_metadata.json")
+            }
+            if (metadataVN == null) {
+                throw GradleException("Could not parse current_version_name from play_store_metadata.json")
+            }
+            
+            if (buildVC != metadataVC) {
+                throw GradleException("Version code mismatch! build.gradle.kts has versionCode = $buildVC but play_store_metadata.json has current_version_code = $metadataVC. Please sync them or run './gradlew incrementVersion' to align them automatically!")
+            }
+            if (buildVN != metadataVN) {
+                throw GradleException("Version name mismatch! build.gradle.kts has versionName = '$buildVN' but play_store_metadata.json has current_version_name = '$metadataVN'. Please sync them!")
+            }
+            println("SUCCESS: Version validation passed (versionCode=$buildVC, versionName=$buildVN).")
+        } else {
+            println("WARNING: play_store_metadata.json not found, skipping validation.")
+        }
+    }
+}
+
+// Make validation run before any standard build
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn("validateVersionCode")
 }
 
